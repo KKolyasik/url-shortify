@@ -6,18 +6,18 @@ import (
 	"strings"
 )
 
-type Shortener interface {
+type ResolveShortener interface {
 	Shorten(raw string) (string, error)
 	Resolve(id string) (string, error)
 }
 
 type Handler struct {
 	BaseURL string
-	S       Shortener
+	rs      ResolveShortener
 }
 
-func New(baseURL string, s Shortener) *Handler {
-	return &Handler{BaseURL: baseURL, S: s}
+func New(baseURL string, s ResolveShortener) *Handler {
+	return &Handler{BaseURL: baseURL, rs: s}
 }
 
 func (h *Handler) Shortify(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +41,7 @@ func (h *Handler) Shortify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shortURL, err := h.S.Shorten(string(raw))
+	shortURL, err := h.rs.Shorten(string(raw))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -63,7 +63,7 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	target, err := h.S.Resolve(id)
+	target, err := h.rs.Resolve(id)
 	if err != nil {
 		http.NotFound(w, r)
 		return

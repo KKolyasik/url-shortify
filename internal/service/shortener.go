@@ -41,7 +41,7 @@ func (s *Service) Shorten(raw string) (string, error) {
 	}
 
 	for {
-		id, err := generateID(6)
+		id, err := generateID(16)
 		if err != nil {
 			return "", err
 		}
