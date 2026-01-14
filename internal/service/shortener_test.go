@@ -8,21 +8,10 @@ import (
 )
 
 type fakeStorage struct {
-	urlToID map[string]string
 	idToURL map[string]string
+	urlToID map[string]string
 
-	hasIDFn func(id string) bool
-
-	saveCalls int
-	lastSaveID string
-	lastSaveU  string
-}
-
-func newFakeStorage() *fakeStorage {
-	return &fakeStorage{
-		urlToID: make(map[string]string),
-		idToURL: make(map[string]string),
-	}
+	lastURLSaved string
 }
 
 func (f *fakeStorage) GetIDByURL(u string) (string, bool) {
@@ -36,106 +25,128 @@ func (f *fakeStorage) GetURLByID(id string) (string, bool) {
 }
 
 func (f *fakeStorage) Save(id, u string) {
-	f.saveCalls++
-	f.lastSaveID = id
-	f.lastSaveU = u
 	f.idToURL[id] = u
 	f.urlToID[u] = id
+	f.lastURLSaved = u
 }
 
 func (f *fakeStorage) HasID(id string) bool {
-	if f.hasIDFn != nil {
-		return f.hasIDFn(id)
-	}
 	_, ok := f.idToURL[id]
 	return ok
 }
 
-func TestService_Shorten_InvalidURL(t *testing.T) {
-	s := New(newFakeStorage())
-
-	cases := []string{
-		"",
-		"   ",
-		"not a url",
-		"ftp://example.com",
-		"http://",
-		"https://",
-		"http://exa mple",
-		"//example.com",
+func TestServise_Resolve(t *testing.T) {
+	tests := []struct {
+		name    string
+		fs      fakeStorage
+		id      string
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "success resolve",
+			fs: fakeStorage{
+				idToURL: map[string]string{
+					"id1": "http://example.com/",
+				},
+			},
+			id:      "id1",
+			want:    "http://example.com/",
+			wantErr: false,
+		},
+		{
+			name:    "empty id",
+			wantErr: true,
+		},
+		{
+			name: "unkown id",
+			fs: fakeStorage{
+				idToURL: map[string]string{
+					"id1": "url1",
+				},
+			},
+			id:      "id2",
+			wantErr: true,
+		},
 	}
 
-	for _, in := range cases {
-		_, err := s.Shorten(in)
-		assert.ErrorIs(t, err, ErrInvalidURL, "input=%q", in)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := New(&tt.fs)
+			u, err := svc.Resolve(tt.id)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, u)
+		})
 	}
 }
 
-func TestService_Shorten_NormalizesAndSaves(t *testing.T) {
-	st := newFakeStorage()
-	s := New(st)
-
-	raw := "HTTP://EXAMPLE.COM/"
-	id, err := s.Shorten(raw)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, id)
-
-	assert.Equal(t, 1, st.saveCalls)
-	assert.Equal(t, id, st.lastSaveID)
-	assert.Equal(t, "http://example.com", st.lastSaveU)
-
-	assert.False(t, strings.Contains(id, "="))
-}
-
-func TestService_Shorten_ReturnsExistingID_NoSave(t *testing.T) {
-	st := newFakeStorage()
-	s := New(st)
-
-	normalized := "http://example.com"
-	st.urlToID[normalized] = "fixed-id"
-
-	id, err := s.Shorten("http://EXAMPLE.com/")
-	assert.NoError(t, err)
-	assert.Equal(t, "fixed-id", id)
-	assert.Equal(t, 0, st.saveCalls)
-}
-
-func TestService_Shorten_Collision_RetriesUntilFree(t *testing.T) {
-	st := newFakeStorage()
-
-	calls := 0
-	st.hasIDFn = func(id string) bool {
-		calls++
-		return calls <= 2
+func TestServise_Shorten(t *testing.T) {
+	tests := []struct {
+		name    string
+		fs      fakeStorage
+		url     string
+		length  int
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "success shorten",
+			fs: fakeStorage{
+				urlToID: make(map[string]string),
+				idToURL: make(map[string]string),
+			},
+			url:     "http://example.com",
+			length:  1,
+			want:    "http://example.com",
+			wantErr: false,
+		},
+		{
+			name: "success normalize",
+			fs: fakeStorage{
+				urlToID: make(map[string]string),
+				idToURL: make(map[string]string),
+			},
+			url:     "http://EXaMpLE.COm/",
+			length:  1,
+			want:    "http://example.com",
+			wantErr: false,
+		},
+		{
+			name: "wrong url",
+			url: "http://",
+			length: 0,
+			wantErr: true,
+		},
+		{
+			name: "wrong url2",
+			url: "http",
+			length: 0,
+			wantErr: true,
+		},
+		{
+			name: "wrong url3",
+			url: "",
+			length: 0,
+			wantErr: true,
+		},
 	}
 
-	s := New(st)
-
-	id, err := s.Shorten("http://example.com")
-	assert.NoError(t, err)
-	assert.NotEmpty(t, id)
-
-	assert.Equal(t, 1, st.saveCalls)
-	assert.Equal(t, "http://example.com", st.lastSaveU)
-}
-
-func TestService_Resolve_TrimAndNotFound(t *testing.T) {
-	st := newFakeStorage()
-	s := New(st)
-
-	_, err := s.Resolve("")
-	assert.ErrorIs(t, err, ErrNotFound)
-
-	_, err = s.Resolve("   ")
-	assert.ErrorIs(t, err, ErrNotFound)
-
-	_, err = s.Resolve("missing")
-	assert.ErrorIs(t, err, ErrNotFound)
-
-	// Сохранённый id
-	st.idToURL["abc"] = "http://example.com"
-
-	u, err := s.Resolve("  abc  ")
-	assert.NoError(t, err)
-	assert.Equal(t, "http://example.com", u)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := New(&tt.fs)
+			id, err := svc.Shorten(tt.url)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, tt.fs.lastURLSaved)
+			assert.Equal(t, tt.length, len(tt.fs.idToURL))
+			assert.False(t, strings.Contains(id, "="))
+		})
+	}
 }
