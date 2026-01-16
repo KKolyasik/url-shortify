@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -79,7 +80,7 @@ func TestHandler_Shortify(t *testing.T) {
 			want: want{
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
-				body:        "Invalid request method\n",
+				body:        "Invalid request method",
 			},
 		},
 		{
@@ -90,7 +91,7 @@ func TestHandler_Shortify(t *testing.T) {
 			want: want{
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
-				body:        "Content-Type must be text/plain\n",
+				body:        "Content-Type must be text/plain",
 			},
 		},
 		{
@@ -101,7 +102,7 @@ func TestHandler_Shortify(t *testing.T) {
 			want: want{
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
-				body:        "Content-Type must be text/plain\n",
+				body:        "Content-Type must be text/plain",
 			},
 		},
 		{
@@ -112,7 +113,7 @@ func TestHandler_Shortify(t *testing.T) {
 			want: want{
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
-				body:        "Failed to read body\n",
+				body:        "Failed to read body",
 			},
 		},
 		{
@@ -123,7 +124,7 @@ func TestHandler_Shortify(t *testing.T) {
 			want: want{
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
-				body:        "Failed to read body\n",
+				body:        "Failed to read body",
 			},
 		},
 		{
@@ -139,20 +140,22 @@ func TestHandler_Shortify(t *testing.T) {
 			want: want{
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
-				body:        "Shorten error\n",
+				body:        "Shorten error",
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
 			handler := New(baseURL, &tt.mock)
 
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(tt.method, path, tt.body)
 			r.Header.Set("Content-Type", tt.contentType)
 
-			handler.Shortify(w, r)
+			c := e.NewContext(r, w)
+			handler.Shortify(c)
 			response := w.Result()
 
 			defer response.Body.Close()
@@ -160,7 +163,7 @@ func TestHandler_Shortify(t *testing.T) {
 			assert.NoError(t, err)
 
 			assert.Equal(t, tt.want.code, response.StatusCode)
-			assert.Equal(t, tt.want.contentType, response.Header.Get("Content-Type"))
+			assert.True(t, strings.EqualFold(tt.want.contentType, response.Header.Get("Content-Type")))
 			assert.Equal(t, tt.want.body, string(body))
 		})
 	}
@@ -204,7 +207,7 @@ func TestHandler_Redirect(t *testing.T) {
 			want: want{
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
-				body:        "Invalid request method\n",
+				body:        "Invalid request method",
 			},
 			wantErr: true,
 		},
@@ -212,19 +215,23 @@ func TestHandler_Redirect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
 			handler := New(baseURL, &tt.mock)
 
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(tt.method, path, nil)
 
-			handler.Redirect(w, r)
+			c := e.NewContext(r, w)
+			c.SetParamNames("id")
+			c.SetParamValues(path)
+			handler.Redirect(c)
 			response := w.Result()
 			defer response.Body.Close()
 
 			assert.Equal(t, tt.want.code, response.StatusCode)
 
 			if tt.wantErr {
-				assert.Equal(t, tt.want.contentType, response.Header.Get("Content-Type"))
+				assert.True(t, strings.EqualFold(tt.want.contentType, response.Header.Get("Content-Type")))
 				body, err := io.ReadAll(response.Body)
 				assert.NoError(t, err)
 				assert.Equal(t, tt.want.body, string(body))
