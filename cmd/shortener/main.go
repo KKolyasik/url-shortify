@@ -6,7 +6,7 @@ import (
 	"github.com/KKolyasik/url-shortify/internal/handler"
 	"github.com/KKolyasik/url-shortify/internal/service"
 	"github.com/KKolyasik/url-shortify/internal/storage"
-	"github.com/labstack/echo/v4"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -14,10 +14,10 @@ func main() {
 	svc := service.New(st)
 	h := handler.New("http://localhost:8080", svc)
 
-	e := echo.New()
-	e.POST("/", h.Shortify)
-	e.GET("/:id", h.Redirect)
-	err := e.Start(":8080")
+	router := gin.Default()
+	router.POST("/", h.Shortify)
+	router.GET("/:id", h.Redirect)
+	err := router.Run()
 	if err != nil {
 		log.Fatal(err)
 	}

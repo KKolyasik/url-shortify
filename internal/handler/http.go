@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/gin-gonic/gin"
 )
 
 type ResolveShortener interface {
@@ -22,51 +22,47 @@ func New(baseURL string, s ResolveShortener) *Handler {
 	return &Handler{BaseURL: baseURL, rs: s}
 }
 
-func (h *Handler) Shortify(c echo.Context) error {
-	request := c.Request()
-	if request.Method != echo.POST {
-		return c.String(http.StatusBadRequest, "Invalid request method")
-	}
+func (h *Handler) Shortify(c *gin.Context) {
+	request := c.Request
 
 	ct := request.Header.Get("Content-Type")
 	if ct == "" || !strings.HasPrefix(strings.ToLower(ct), "text/plain") {
-		return c.String(http.StatusBadRequest, "Content-Type must be text/plain")
+		c.String(http.StatusBadRequest, "Content-Type must be text/plain")
+		return
 	}
 
-	request.Body = http.MaxBytesReader(c.Response().Writer, request.Body, 8<<10)
+	request.Body = http.MaxBytesReader(c.Writer, request.Body, 8<<10)
 	defer request.Body.Close()
 	raw, err := io.ReadAll(request.Body)
 	if err != nil {
-		return c.String(http.StatusBadRequest, "Failed to read body")
+		c.String(http.StatusBadRequest, "Failed to read body")
+		return
 	}
 	shortURL, err := h.rs.Shorten(string(raw))
 	if err != nil {
-		return c.String(http.StatusBadRequest, err.Error())
+		c.String(http.StatusBadRequest, err.Error())
+		return
 	}
-	c.Response().Writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	c.Response().Writer.WriteHeader(http.StatusCreated)
-	c.Response().Writer.Write([]byte(h.BaseURL + "/" + shortURL))
+	c.Writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	c.Writer.WriteHeader(http.StatusCreated)
+	c.Writer.Write([]byte(h.BaseURL + "/" + shortURL))
 
-	return nil
 }
 
 
-func (h *Handler) Redirect(c echo.Context) error {
-	request := c.Request()
-	if request.Method != echo.GET {
-		return c.String(http.StatusBadRequest, "Invalid request method")
-	}
+func (h *Handler) Redirect(c *gin.Context) {
 
 	id := c.Param("id")
 	if id == "" {
-		return c.String(http.StatusNotFound, "URL not found")
+		c.String(http.StatusNotFound, "URL not found")
+		return
 	}
 
 	target, err := h.rs.Resolve(id)
 	if err != nil {
-		return c.String(http.StatusNotFound, "URL not found")
+		c.String(http.StatusNotFound, "URL not found")
+		return
 	}
 
 	c.Redirect(http.StatusTemporaryRedirect, target)
-	return nil
 }

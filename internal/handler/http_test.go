@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -74,13 +74,13 @@ func TestHandler_Shortify(t *testing.T) {
 			},
 		},
 		{
-			name:   "bad method -> 400, shorten not called",
+			name:   "bad method -> 404, shorten not called",
 			method: http.MethodGet,
 			body:   strings.NewReader("http://example.com"),
 			want: want{
-				code:        http.StatusBadRequest,
-				contentType: "text/plain; charset=utf-8",
-				body:        "Invalid request method",
+				code:        http.StatusNotFound,
+				contentType: "text/plain",
+				body:        "404 page not found",
 			},
 		},
 		{
@@ -147,17 +147,17 @@ func TestHandler_Shortify(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e := echo.New()
+			g := gin.New()
 			handler := New(baseURL, &tt.mock)
 
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(tt.method, path, tt.body)
 			r.Header.Set("Content-Type", tt.contentType)
 
-			c := e.NewContext(r, w)
-			handler.Shortify(c)
+			g.POST(path, handler.Shortify)
+			g.ServeHTTP(w, r)
 			response := w.Result()
-
+           
 			defer response.Body.Close()
 			body, err := io.ReadAll(response.Body)
 			assert.NoError(t, err)
@@ -172,7 +172,7 @@ func TestHandler_Shortify(t *testing.T) {
 func TestHandler_Redirect(t *testing.T) {
 	const (
 		baseURL = "http://localhost:8080"
-		path    = "/redirect"
+		path    = "/:id"
 	)
 	type want struct {
 		code        int
@@ -202,12 +202,12 @@ func TestHandler_Redirect(t *testing.T) {
 			},
 		},
 		{
-			name:   "bad method -> 400, resolve not called",
+			name:   "bad method -> 404, resolve not called",
 			method: http.MethodPost,
 			want: want{
-				code:        http.StatusBadRequest,
-				contentType: "text/plain; charset=utf-8",
-				body:        "Invalid request method",
+				code:        http.StatusNotFound,
+				contentType: "text/plain",
+				body:        "404 page not found",
 			},
 			wantErr: true,
 		},
@@ -215,16 +215,14 @@ func TestHandler_Redirect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e := echo.New()
+			g := gin.New()
 			handler := New(baseURL, &tt.mock)
 
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(tt.method, path, nil)
 
-			c := e.NewContext(r, w)
-			c.SetParamNames("id")
-			c.SetParamValues(path)
-			handler.Redirect(c)
+			g.GET(path, handler.Redirect)
+			g.ServeHTTP(w, r)
 			response := w.Result()
 			defer response.Body.Close()
 
