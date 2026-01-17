@@ -20,7 +20,7 @@ func (na *NetAddress) String() string {
 func (na *NetAddress) Set(s string) error {
 	raw := strings.Split(s, ":")
 	if len(raw) != 2 {
-		return errors.New("Incorrect net address. Should be host:port")
+		return errors.New("incorrect net address. Should be host:port")
 	}
 	host := raw[0]
 	port, err := strconv.Atoi(raw[1])
@@ -46,7 +46,7 @@ func parseURLAddr(s string) error {
 	}
 
 	if addr.Scheme == "" || addr.Host == "" {
-		return errors.New("Base url must include scheme and host")
+		return errors.New("base url must include scheme and host")
 	}
 
 	URLAddr = addr.String()
