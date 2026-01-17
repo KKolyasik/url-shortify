@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 
+	"github.com/KKolyasik/url-shortify/internal/config"
 	"github.com/KKolyasik/url-shortify/internal/handler"
 	"github.com/KKolyasik/url-shortify/internal/service"
 	"github.com/KKolyasik/url-shortify/internal/storage"
@@ -10,14 +11,15 @@ import (
 )
 
 func main() {
+	config.AddFlags()
 	st := storage.NewMemoryStore()
 	svc := service.New(st)
-	h := handler.New("http://localhost:8080", svc)
+	h := handler.New(config.URLAddr, svc)
 
 	router := gin.Default()
 	router.POST("/", h.Shortify)
 	router.GET("/:id", h.Redirect)
-	err := router.Run()
+	err := router.Run(config.Addr.String())
 	if err != nil {
 		log.Fatal(err)
 	}
