@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -74,13 +73,13 @@ func TestHandler_Shortify(t *testing.T) {
 			},
 		},
 		{
-			name:   "bad method -> 404, shorten not called",
+			name:   "bad method -> 405, shorten not called",
 			method: http.MethodGet,
 			body:   strings.NewReader("http://example.com"),
 			want: want{
-				code:        http.StatusNotFound,
-				contentType: "text/plain",
-				body:        "404 page not found",
+				code:        http.StatusMethodNotAllowed,
+				contentType: "text/plain; charset=utf-8",
+				body:        "Invalid request method\n",
 			},
 		},
 		{
@@ -91,7 +90,7 @@ func TestHandler_Shortify(t *testing.T) {
 			want: want{
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
-				body:        "Content-Type must be text/plain",
+				body:        "Content-Type must be text/plain\n",
 			},
 		},
 		{
@@ -102,7 +101,7 @@ func TestHandler_Shortify(t *testing.T) {
 			want: want{
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
-				body:        "Content-Type must be text/plain",
+				body:        "Content-Type must be text/plain\n",
 			},
 		},
 		{
@@ -113,7 +112,7 @@ func TestHandler_Shortify(t *testing.T) {
 			want: want{
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
-				body:        "Failed to read body",
+				body:        "Failed to read body\n",
 			},
 		},
 		{
@@ -124,7 +123,7 @@ func TestHandler_Shortify(t *testing.T) {
 			want: want{
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
-				body:        "Failed to read body",
+				body:        "Failed to read body\n",
 			},
 		},
 		{
@@ -140,22 +139,20 @@ func TestHandler_Shortify(t *testing.T) {
 			want: want{
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
-				body:        "Shorten error",
+				body:        "Shorten error\n",
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			g := gin.New()
 			handler := New(baseURL, &tt.mock)
 
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(tt.method, path, tt.body)
 			r.Header.Set("Content-Type", tt.contentType)
 
-			g.POST(path, handler.Shortify)
-			g.ServeHTTP(w, r)
+			handler.Shortify(w, r)
 			response := w.Result()
            
 			defer response.Body.Close()
@@ -172,7 +169,7 @@ func TestHandler_Shortify(t *testing.T) {
 func TestHandler_Redirect(t *testing.T) {
 	const (
 		baseURL = "http://localhost:8080"
-		path    = "/:id"
+		path    = "/redirect"
 	)
 	type want struct {
 		code        int
@@ -202,12 +199,12 @@ func TestHandler_Redirect(t *testing.T) {
 			},
 		},
 		{
-			name:   "bad method -> 404, resolve not called",
+			name:   "bad method -> 405, resolve not called",
 			method: http.MethodPost,
 			want: want{
-				code:        http.StatusNotFound,
-				contentType: "text/plain",
-				body:        "404 page not found",
+				code:        http.StatusMethodNotAllowed,
+				contentType: "text/plain; charset=utf-8",
+				body:        "Invalid request method\n",
 			},
 			wantErr: true,
 		},
@@ -215,14 +212,12 @@ func TestHandler_Redirect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			g := gin.New()
 			handler := New(baseURL, &tt.mock)
 
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(tt.method, path, nil)
 
-			g.GET(path, handler.Redirect)
-			g.ServeHTTP(w, r)
+			handler.Redirect(w, r, path)
 			response := w.Result()
 			defer response.Body.Close()
 

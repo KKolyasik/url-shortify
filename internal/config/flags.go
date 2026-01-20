@@ -33,28 +33,30 @@ func (na *NetAddress) Set(s string) error {
 	return nil
 }
 
-var Addr NetAddress = NetAddress{
-	Host: "localhost",
-	Port: 8080,
-}
-var URLAddr string = "http://localhost:8080"
-
-func parseURLAddr(s string) error {
+func parseURLAddr(s string) (string, error) {
 	addr, err := url.ParseRequestURI(s)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if addr.Scheme == "" || addr.Host == "" {
-		return errors.New("base url must include scheme and host")
+		return "", errors.New("base url must include scheme and host")
 	}
 
-	URLAddr = addr.String()
-	return nil
+	return addr.String(), nil
 }
 
-func AddFlags() {
-	flag.Var(&Addr, "a", "Net address host:port")
-	flag.Func("b", "Base URL for shortened links, including scheme (e.g. http://localhost:8080)", parseURLAddr)
+func ParseFlags(cfg *Config) error {
+	flag.Var(&cfg.Addr, "a", "Net address host:port")
+	flag.Func("b", "Base URL for shortened links", func(s string) error {
+		parsed, err := parseURLAddr(s)
+		if err != nil {
+			return err
+		}
+		cfg.URLAddr = parsed
+		return nil
+	})
+
 	flag.Parse()
+	return nil
 }

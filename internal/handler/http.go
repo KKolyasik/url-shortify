@@ -4,8 +4,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-
-	"github.com/gin-gonic/gin"
 )
 
 type ResolveShortener interface {
@@ -22,47 +20,54 @@ func New(baseURL string, s ResolveShortener) *Handler {
 	return &Handler{BaseURL: baseURL, rs: s}
 }
 
-func (h *Handler) Shortify(c *gin.Context) {
-	request := c.Request
+func (h *Handler) Shortify(w http.ResponseWriter, r *http.Request) {
 
-	ct := request.Header.Get("Content-Type")
-	if ct == "" || !strings.HasPrefix(strings.ToLower(ct), "text/plain") {
-		c.String(http.StatusBadRequest, "Content-Type must be text/plain")
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
 
-	request.Body = http.MaxBytesReader(c.Writer, request.Body, 8<<10)
-	defer request.Body.Close()
-	raw, err := io.ReadAll(request.Body)
+	ct := r.Header.Get("Content-Type")
+	if ct == "" || !strings.HasPrefix(strings.ToLower(ct), "text/plain") {
+		http.Error(w, "Content-Type must be text/plain", http.StatusBadRequest)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
+	defer r.Body.Close()
+	raw, err := io.ReadAll(r.Body)
 	if err != nil {
-		c.String(http.StatusBadRequest, "Failed to read body")
+		http.Error(w, "Failed to read body", http.StatusBadRequest)
 		return
 	}
 	shortURL, err := h.rs.Shorten(string(raw))
 	if err != nil {
-		c.String(http.StatusBadRequest, err.Error())
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	c.Writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	c.Writer.WriteHeader(http.StatusCreated)
-	c.Writer.Write([]byte(h.BaseURL + "/" + shortURL))
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte(h.BaseURL + "/" + shortURL))
 
 }
 
+func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request, id string) {
 
-func (h *Handler) Redirect(c *gin.Context) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
 
-	id := c.Param("id")
 	if id == "" {
-		c.String(http.StatusNotFound, "URL not found")
+		http.Error(w, "URL not found", http.StatusBadRequest)
 		return
 	}
 
 	target, err := h.rs.Resolve(id)
 	if err != nil {
-		c.String(http.StatusNotFound, "URL not found")
+		http.Error(w, "URL not found", http.StatusBadRequest)
 		return
 	}
 
-	c.Redirect(http.StatusTemporaryRedirect, target)
+	http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 }
