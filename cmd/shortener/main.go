@@ -12,11 +12,8 @@ import (
 )
 
 func main() {
-	cfg := config.NewConfig()
-	if err := config.ParseFlags(&cfg); err != nil {
-		log.Fatal(err)
-	}
-	if err := config.ParseEnv(&cfg); err != nil {
+	cfg, err := config.Load()
+	if err != nil {
 		log.Fatal(err)
 	}
 	st := storage.NewMemoryStore()
@@ -25,7 +22,7 @@ func main() {
 	router := gin.Default()
 	router.POST("/", transport.GinShortify(h))
 	router.GET("/:id", transport.GinRedirect(h))
-	err := router.Run(cfg.Addr.String())
+	err = router.Run(cfg.Addr.String())
 	if err != nil {
 		log.Fatal(err)
 	}

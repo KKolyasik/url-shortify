@@ -14,3 +14,19 @@ func NewConfig() Config {
 		URLAddr: "http://localhost:8080",
 	}
 }
+
+func Load() (Config, error) {
+	cfg := NewConfig()
+
+	err := ParseFlags(&cfg)
+	if err != nil {
+		return Config{}, err
+	}
+
+	err = ParseEnv(&cfg)
+	if err != nil {
+		return Config{}, err
+	}
+
+	return cfg, nil
+}

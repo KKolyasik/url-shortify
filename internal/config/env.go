@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"os"
 
 	"github.com/caarlos0/env/v6"
@@ -19,16 +18,18 @@ func ParseEnv(cfg *Config) error {
 	}
 
 	if _, ok := os.LookupEnv("SERVER_ADDRESS"); ok {
-		if err := cfg.Addr.Set(ua.ServerAddr); err != nil {
-			return errors.New("incorrect net address. Should be host:port")
+		parsed, err := ParseNetAddress(ua.ServerAddr)
+		if err != nil {
+			return err
 		}
+		cfg.Addr = parsed
 	}
 	if _, ok := os.LookupEnv("BASE_URL"); ok {
-		baseURL, err := parseURLAddr(ua.BaseURL)
+		parsed, err := ParseBaseURL(ua.BaseURL)
 		if err != nil {
-			return errors.New("base url must include scheme and host")
+			return err
 		}
-		cfg.URLAddr = baseURL
+		cfg.URLAddr = parsed
 	}
 
 	return nil
