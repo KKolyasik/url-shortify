@@ -16,6 +16,9 @@ func main() {
 	if err := config.ParseFlags(&cfg); err != nil {
 		log.Fatal(err)
 	}
+	if err := config.ParseEnv(&cfg); err != nil {
+		log.Fatal(err)
+	}
 	st := storage.NewMemoryStore()
 	svc := service.New(st)
 	h := handler.New(cfg.URLAddr, svc)

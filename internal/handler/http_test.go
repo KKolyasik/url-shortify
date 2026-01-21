@@ -154,7 +154,7 @@ func TestHandler_Shortify(t *testing.T) {
 
 			handler.Shortify(w, r)
 			response := w.Result()
-           
+
 			defer response.Body.Close()
 			body, err := io.ReadAll(response.Body)
 			assert.NoError(t, err)
@@ -169,7 +169,7 @@ func TestHandler_Shortify(t *testing.T) {
 func TestHandler_Redirect(t *testing.T) {
 	const (
 		baseURL = "http://localhost:8080"
-		path    = "/redirect"
+		path    = "/abc"
 	)
 	type want struct {
 		code        int
@@ -181,6 +181,7 @@ func TestHandler_Redirect(t *testing.T) {
 	tests := []struct {
 		name    string
 		method  string
+		id      string
 		mock    mockShortener
 		want    want
 		wantErr bool
@@ -188,6 +189,7 @@ func TestHandler_Redirect(t *testing.T) {
 		{
 			name:   "success: 307 with Location header",
 			method: http.MethodGet,
+			id:     "abc",
 			mock: mockShortener{
 				resolveFn: func(id string) (string, error) {
 					return "http://example.com/", nil
@@ -195,6 +197,7 @@ func TestHandler_Redirect(t *testing.T) {
 			},
 			want: want{
 				code:     http.StatusTemporaryRedirect,
+				contentType: "text/html; charset=utf-8",
 				location: "http://example.com/",
 			},
 		},
@@ -208,6 +211,30 @@ func TestHandler_Redirect(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name:   "empty id -> 404, not found",
+			method: http.MethodGet,
+			want: want{
+				code:        http.StatusNotFound,
+				contentType: "text/plain; charset=utf-8",
+				body:        "URL not found\n",
+			},
+			wantErr: true,
+		},
+		{
+			name:   "resolve error -> 404, not found",
+			method: http.MethodGet,
+			mock: mockShortener{
+				resolveFn: func(id string) (string, error) { return "", errors.New("Resolve error") },
+			},
+			id: "abc",
+			want: want{
+				code:        http.StatusNotFound,
+				contentType: "text/plain; charset=utf-8",
+				body:        "URL not found\n",
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -217,14 +244,14 @@ func TestHandler_Redirect(t *testing.T) {
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(tt.method, path, nil)
 
-			handler.Redirect(w, r, path)
+			handler.Redirect(w, r, tt.id)
 			response := w.Result()
 			defer response.Body.Close()
 
 			assert.Equal(t, tt.want.code, response.StatusCode)
+			assert.True(t, strings.EqualFold(tt.want.contentType, response.Header.Get("Content-Type")))
 
 			if tt.wantErr {
-				assert.True(t, strings.EqualFold(tt.want.contentType, response.Header.Get("Content-Type")))
 				body, err := io.ReadAll(response.Body)
 				assert.NoError(t, err)
 				assert.Equal(t, tt.want.body, string(body))

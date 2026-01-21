@@ -59,13 +59,13 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request, id string) {
 	}
 
 	if id == "" {
-		http.Error(w, "URL not found", http.StatusBadRequest)
+		http.Error(w, "URL not found", http.StatusNotFound)
 		return
 	}
 
 	target, err := h.rs.Resolve(id)
 	if err != nil {
-		http.Error(w, "URL not found", http.StatusBadRequest)
+		http.Error(w, "URL not found", http.StatusNotFound)
 		return
 	}
 
