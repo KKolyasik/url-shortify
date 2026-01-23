@@ -92,41 +92,58 @@ func TestRequestLogger(t *testing.T) {
 				size:   -1,
 			},
 		},
+		{
+			name:       "internal server error",
+			router:     func(ctx *gin.Context) { panic("internal server error") },
+			method:     http.MethodGet,
+			sendMetgod: http.MethodGet,
+			path:       "/ping",
+			sendPath:   "/ping",
+			want: want{
+				code:   http.StatusInternalServerError,
+				calls:  1,
+				status: http.StatusInternalServerError,
+				msg:    "http request",
+				method: http.MethodGet,
+				path:   "/ping",
+				size:   0,
+			},
+		},
 	}
 
 	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := &mockLogger{}
+			g := gin.New()
+			g.Use(RequestLogger(l))
+			g.Use(gin.Recovery())
+			g.Handle(tt.method, tt.path, tt.router)
+			r := httptest.NewRequest(tt.sendMetgod, tt.sendPath, nil)
+			w := httptest.NewRecorder()
+			g.ServeHTTP(w, r)
+			response := w.Result()
+			defer response.Body.Close()
 
-		l := &mockLogger{}
+			assert.Equal(t, tt.want.code, response.StatusCode)
+			assert.Equal(t, tt.want.msg, l.msg)
+			assert.Equal(t, tt.want.calls, l.calls)
 
-		g := gin.New()
-		g.Use(RequestLogger(l))
-		g.Handle(tt.method, tt.path, tt.router)
-		r := httptest.NewRequest(tt.sendMetgod, tt.sendPath, nil)
-		w := httptest.NewRecorder()
-		g.ServeHTTP(w, r)
+			method, ok := kvGet(l.fields, "method")
+			require.True(t, ok)
+			assert.Equal(t, tt.want.method, method)
 
-		response := w.Result()
+			path, ok := kvGet(l.fields, "path")
+			require.True(t, ok)
+			assert.Equal(t, tt.want.path, path)
 
-		assert.Equal(t, tt.want.code, response.StatusCode)
-		assert.Equal(t, tt.want.msg, l.msg)
-		assert.Equal(t, tt.want.calls, l.calls)
+			status, ok := kvGet(l.fields, "status")
+			require.True(t, ok)
+			assert.Equal(t, tt.want.status, status)
 
-		method, ok := kvGet(l.fields, "method")
-		require.True(t, ok)
-		assert.Equal(t, tt.want.method, method)
-
-		path, ok := kvGet(l.fields, "path")
-		require.True(t, ok)
-		assert.Equal(t, tt.want.path, path)
-
-		status, ok := kvGet(l.fields, "status")
-		require.True(t, ok)
-		assert.Equal(t, tt.want.status, status)
-
-		size, ok := kvGet(l.fields, "size")
-		require.True(t, ok)
-		assert.Equal(t, tt.want.size, size)
-
+			size, ok := kvGet(l.fields, "size")
+			require.True(t, ok)
+			assert.Equal(t, tt.want.size, size)
+		})
 	}
 }
 
