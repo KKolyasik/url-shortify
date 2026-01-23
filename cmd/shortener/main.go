@@ -1,3 +1,29 @@
 package main
 
-func main() {}
+import (
+	"log"
+
+	"github.com/KKolyasik/url-shortify/internal/config"
+	"github.com/KKolyasik/url-shortify/internal/handler"
+	"github.com/KKolyasik/url-shortify/internal/service"
+	"github.com/KKolyasik/url-shortify/internal/storage"
+	"github.com/KKolyasik/url-shortify/internal/transport"
+	"github.com/gin-gonic/gin"
+)
+
+func main() {
+	cfg := config.NewConfig()
+	if err := config.ParseFlags(&cfg); err != nil {
+		log.Fatal(err)
+	}
+	st := storage.NewMemoryStore()
+	svc := service.New(st)
+	h := handler.New(cfg.URLAddr, svc)
+	router := gin.Default()
+	router.POST("/", transport.GinShortify(h))
+	router.GET("/:id", transport.GinRedirect(h))
+	err := router.Run(cfg.Addr.String())
+	if err != nil {
+		log.Fatal(err)
+	}
+}
