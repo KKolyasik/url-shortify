@@ -1,9 +1,13 @@
 package handler
 
 import (
+	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/KKolyasik/url-shortify/internal/model"
 )
 
 type ResolveShortener interface {
@@ -70,4 +74,52 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request, id string) {
 	}
 
 	http.Redirect(w, r, target, http.StatusTemporaryRedirect)
+}
+
+func (h *Handler) ShortifyJSON(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ct := r.Header.Get("Content-Type")
+	if ct == "" || !strings.EqualFold(ct, "application/json") {
+		http.Error(w, "Content-Type must be application/json", http.StatusBadRequest)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
+	defer r.Body.Close()
+
+	var u model.URLRequest
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&u); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "Cannot decode request JSON body", http.StatusBadRequest)
+		return
+	}
+
+	shortURL, err := h.rs.Shorten(u.URL)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	resp := model.URLResponse{Result: h.BaseURL + "/" + shortURL}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+
+	
+	enc := json.NewEncoder(w)
+	if err := enc.Encode(resp); err != nil {
+		http.Error(w, "error encoding response", http.StatusBadRequest)
+		return
+	}
+
 }
