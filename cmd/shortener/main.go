@@ -25,6 +25,7 @@ func main() {
 	h := handler.New(cfg.URLAddr, svc)
 	router := gin.Default()
 	router.Use(ginmw.RequestLogger(logger.Log))
+	router.POST("/api/shorten", transport.GinShortifyJSON(h))
 	router.POST("/", transport.GinShortify(h))
 	router.GET("/:id", transport.GinRedirect(h))
 	err = router.Run(cfg.Addr.String())

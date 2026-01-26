@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -8,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/KKolyasik/url-shortify/internal/model"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,6 +39,25 @@ func (m *mockShortener) Resolve(id string) (string, error) {
 		return "", nil
 	}
 	return m.resolveFn(id)
+}
+
+func marshalRequestBody(url string) string {
+	request := model.URLRequest{URL: url}
+	r, err := json.Marshal(request)
+	if err != nil {
+		panic(err)
+	}
+	return string(r)
+}
+
+func marshalResponseBody(result string) string {
+	buf := bytes.NewBuffer([]byte{})
+	response := model.URLResponse{Result: result}
+	enc := json.NewEncoder(buf)
+	if err := enc.Encode(response); err != nil {
+		panic(err)
+	}
+	return buf.String()
 }
 
 func TestHandler_Shortify(t *testing.T) {
@@ -196,9 +218,9 @@ func TestHandler_Redirect(t *testing.T) {
 				},
 			},
 			want: want{
-				code:     http.StatusTemporaryRedirect,
+				code:        http.StatusTemporaryRedirect,
 				contentType: "text/html; charset=utf-8",
-				location: "http://example.com/",
+				location:    "http://example.com/",
 			},
 		},
 		{
@@ -260,4 +282,132 @@ func TestHandler_Redirect(t *testing.T) {
 		})
 	}
 
+}
+
+func TestHandler_ShortifyJSON(t *testing.T) {
+	const (
+		baseURL = "http://localhost:8080"
+		path    = "/api/shorten"
+	)
+	type want struct {
+		code        int
+		contentType string
+		body        string
+	}
+	tests := []struct {
+		name        string
+		method      string
+		contentType string
+		body        io.Reader
+		mock        mockShortener
+		want        want
+	}{
+		{
+			name:        "success: returns 201",
+			method:      http.MethodPost,
+			contentType: "application/json",
+			body:        strings.NewReader(marshalRequestBody("http://example.com")),
+			mock: mockShortener{
+				shortenFn: func(raw string) (string, error) {
+					return "abc", nil
+				},
+			},
+			want: want{
+				code:        http.StatusCreated,
+				contentType: "application/json",
+				body:        marshalResponseBody(baseURL + "/" + "abc"),
+			},
+		},
+		{
+			name:   "bad method -> 405, shorten not called",
+			method: http.MethodGet,
+			body:   strings.NewReader(marshalRequestBody("http://example.com")),
+			want: want{
+				code:        http.StatusMethodNotAllowed,
+				contentType: "text/plain; charset=utf-8",
+				body:        "Invalid request method\n",
+			},
+		},
+		{
+			name:        "missing content-type -> 400, shorten not called",
+			method:      http.MethodPost,
+			contentType: "",
+			body:        strings.NewReader(marshalRequestBody("http://example.com")),
+			want: want{
+				code:        http.StatusBadRequest,
+				contentType: "text/plain; charset=utf-8",
+				body:        "Content-Type must be application/json\n",
+			},
+		},
+		{
+			name:        "wrong content-type -> 400, shorten not called",
+			method:      http.MethodPost,
+			contentType: "text/plain; charset=utf-8",
+			body:        strings.NewReader(marshalRequestBody("http://example.com")),
+			want: want{
+				code:        http.StatusBadRequest,
+				contentType: "text/plain; charset=utf-8",
+				body:        "Content-Type must be application/json\n",
+			},
+		},
+		{
+			name:        "body read error -> 400, shorten not called",
+			method:      http.MethodPost,
+			contentType: "application/json",
+			body:        &BodyErr{msg: "read error"},
+			want: want{
+				code:        http.StatusBadRequest,
+				contentType: "text/plain; charset=utf-8",
+				body:        "Cannot decode request JSON body\n",
+			},
+		},
+		{
+			name:        "body too large 400, shorten not called",
+			method:      http.MethodPost,
+			contentType: "application/json",
+			body:        strings.NewReader(marshalRequestBody(strings.Repeat("a", 8<<10+1))),
+			want: want{
+				code:        http.StatusRequestEntityTooLarge,
+				contentType: "text/plain; charset=utf-8",
+				body:        "Request body too large\n",
+			},
+		},
+		{
+			name:        "shortener error -> 400, error message returned",
+			method:      http.MethodPost,
+			contentType: "application/json",
+			body:        strings.NewReader(marshalRequestBody("http://example.com")),
+			mock: mockShortener{
+				shortenFn: func(raw string) (string, error) {
+					return "", errors.New("Shorten error")
+				},
+			},
+			want: want{
+				code:        http.StatusBadRequest,
+				contentType: "text/plain; charset=utf-8",
+				body:        "Shorten error\n",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := New(baseURL, &tt.mock)
+
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(tt.method, path, tt.body)
+			r.Header.Set("Content-Type", tt.contentType)
+
+			handler.ShortifyJSON(w, r)
+			response := w.Result()
+
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			assert.NoError(t, err)
+
+			assert.Equal(t, tt.want.code, response.StatusCode)
+			assert.True(t, strings.EqualFold(tt.want.contentType, response.Header.Get("Content-Type")))
+			assert.Equal(t, tt.want.body, string(body))
+		})
+	}
 }
