@@ -21,13 +21,13 @@ import (
 )
 
 func main() {
+	logger.Initialize("Info")
+	defer logger.Log.Sync()
+
 	cfg, err := config.Load()
 	if err != nil {
 		logger.Log.Sugar().Fatal(err.Error())
 	}
-
-	logger.Initialize("Info")
-	defer logger.Log.Sync()
 
 	en := encoding.NewGzip(gzip.BestCompression)
 
