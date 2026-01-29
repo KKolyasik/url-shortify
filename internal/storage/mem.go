@@ -42,3 +42,15 @@ func (m *MemoryStore) HasID(id string) bool {
 	_, ok := m.idToURL[id]
 	return ok
 }
+
+func (m *MemoryStore) GetAllIDToURLs() map[string]string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	dst := make(map[string]string, len(m.idToURL))
+
+	for id, url := range m.idToURL {
+		dst[id] = url
+	}
+
+	return dst
+}

@@ -33,6 +33,14 @@ func ParseFlags(cfg *Config) error {
 		cfg.URLAddr = parsed
 		return nil
 	})
+	flag.Func("f", "File storage path", func(s string) error {
+		filename, err := ParseFileName(s)
+		if err != nil {
+			return err
+		}
+		cfg.FileStorage = filename
+		return nil
+	})
 
 	flag.Parse()
 	return nil

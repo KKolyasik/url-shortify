@@ -1,8 +1,9 @@
 package config
 
 type Config struct {
-	Addr    NetAddress
-	URLAddr string
+	Addr        NetAddress
+	URLAddr     string
+	FileStorage string
 }
 
 func NewConfig() Config {
@@ -12,6 +13,7 @@ func NewConfig() Config {
 			Port: 8080,
 		},
 		URLAddr: "http://localhost:8080",
+		FileStorage: "urls.txt",
 	}
 }
 
