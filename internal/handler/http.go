@@ -118,7 +118,7 @@ func (h *Handler) ShortifyJSON(w http.ResponseWriter, r *http.Request) {
 	
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(resp); err != nil {
-		http.Error(w, "error encoding response", http.StatusBadRequest)
+		http.Error(w, "error encoding response", http.StatusInternalServerError)
 		return
 	}
 

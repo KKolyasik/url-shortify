@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/KKolyasik/url-shortify/internal/logger"
+	"github.com/google/uuid"
 )
 
 type Storage interface {
@@ -15,9 +16,9 @@ type Storage interface {
 }
 
 type URL struct {
-	UUID        uint   `json:"uuid"`
-	ShortURL    string `json:"short_url"`
-	OriginalURL string `json:"original_url"`
+	UUID        uuid.UUID `json:"uuid"`
+	ShortURL    string    `json:"short_url"`
+	OriginalURL string    `json:"original_url"`
 }
 
 type FileStorage struct {
@@ -67,15 +68,14 @@ func (f *FileStorage) Save() error {
 		return err
 	}
 
-	var uuid uint
 	data := f.storage.GetAllIDToURLs()
 	urls := make([]URL, 0, len(data))
-	
+
 	for id, url := range data {
-		uuid++
+		uuid := uuid.New()
 		urls = append(urls, URL{
-			UUID: uuid,
-			ShortURL: id,
+			UUID:        uuid,
+			ShortURL:    id,
 			OriginalURL: url,
 		})
 	}

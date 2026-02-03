@@ -2,14 +2,19 @@ package config
 
 import (
 	"os"
+	"time"
 
 	"github.com/caarlos0/env/v6"
 )
 
 type Settings struct {
-	ServerAddr  string `env:"SERVER_ADDRESS"`
-	BaseURL     string `env:"BASE_URL"`
-	FileStorage string `env:"FILE_STORAGE_PATH"`
+	ServerAddr        string        `env:"SERVER_ADDRESS"`
+	BaseURL           string        `env:"BASE_URL"`
+	FileStorage       string        `env:"FILE_STORAGE_PATH"`
+	ReadHeaderTimeout time.Duration `env:"READ_HEADER_TIMEOUT"`
+	ReadTimeout       time.Duration `env:"READ_TIMEOUT"`
+	WriteTimeout      time.Duration `env:"WRITE_TIMEOUT"`
+	IdleTimeout       time.Duration `env:"IDLE_TIMEOUT"`
 }
 
 func ParseEnv(cfg *Config) error {
@@ -39,6 +44,22 @@ func ParseEnv(cfg *Config) error {
 			return err
 		}
 		cfg.FileStorage = parsed
+	}
+
+	if _, ok := os.LookupEnv("READ_HEADER_TIMEOUT"); ok {
+		cfg.ReadHeaderTimeout = s.ReadHeaderTimeout
+	}
+
+	if _, ok := os.LookupEnv("READ_TIMEOUT"); ok {
+		cfg.ReadHeaderTimeout = s.ReadTimeout
+	}
+
+	if _, ok := os.LookupEnv("WRITE_TIMEOUT"); ok {
+		cfg.ReadHeaderTimeout = s.WriteTimeout
+	}
+
+	if _, ok := os.LookupEnv("IDLE_TIMEOUT"); ok {
+		cfg.ReadHeaderTimeout = s.IdleTimeout
 	}
 
 	return nil

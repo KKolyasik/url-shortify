@@ -69,6 +69,10 @@ func main() {
 	srv := &http.Server{
 		Addr:    cfg.Addr.String(),
 		Handler: router,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout: cfg.ReadTimeout,
+		WriteTimeout: cfg.WriteTimeout,
+		IdleTimeout: cfg.IdleTimeout,
 	}
 
 	go func() {

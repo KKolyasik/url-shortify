@@ -1,9 +1,15 @@
 package config
 
+import "time"
+
 type Config struct {
-	Addr        NetAddress
-	URLAddr     string
-	FileStorage string
+	Addr              NetAddress
+	URLAddr           string
+	FileStorage       string
+	ReadHeaderTimeout time.Duration
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
 }
 
 func NewConfig() Config {
@@ -12,8 +18,12 @@ func NewConfig() Config {
 			Host: "localhost",
 			Port: 8080,
 		},
-		URLAddr: "http://localhost:8080",
-		FileStorage: "urls.txt",
+		URLAddr:           "http://localhost:8080",
+		FileStorage:       "urls.txt",
+		ReadHeaderTimeout: 2 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 }
 
