@@ -15,7 +15,7 @@ func TestMemoryStore_Empty(t *testing.T) {
 	assert.Equal(t, "", id)
 
 	u, err := s.GetURLByID(context.Background(), "abc")
-	assert.ErrorIs(t, err, URLNotFound)
+	assert.ErrorIs(t, err, ErrURLNotFound)
 	assert.Equal(t, "", u)
 
 	ok, err := s.HasID(context.Background(), "abc")

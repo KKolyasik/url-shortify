@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	IdNotFound  = errors.New("id not found")
-	URLNotFound = errors.New("url not found")
+	ErrIdNotFound  = errors.New("id not found")
+	ErrURLNotFound = errors.New("url not found")
 )
 
 type MemoryStore struct {
@@ -49,7 +49,7 @@ func (m *MemoryStore) GetURLByID(ctx context.Context, id string) (string, error)
 	}
 	u, ok := m.idToURL[id]
 	if !ok {
-		return "", URLNotFound
+		return "", ErrURLNotFound
 	}
 	return u, nil
 }
