@@ -39,7 +39,7 @@ func ParseBaseURL(s string) (string, error) {
 }
 
 func ParseFileName(filename string) (string, error) {
-    name := strings.ToLower(strings.TrimSpace(filename))
+    name := strings.TrimSpace(filename)
     if name == "" {
 		return "", ErrInvalidFileName
 	}

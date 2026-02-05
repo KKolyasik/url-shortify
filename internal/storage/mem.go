@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	ErrIdNotFound  = errors.New("id not found")
+	ErrIDNotFound  = errors.New("id not found")
 	ErrURLNotFound = errors.New("url not found")
 )
 
