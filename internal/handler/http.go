@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,8 +12,8 @@ import (
 )
 
 type ResolveShortener interface {
-	Shorten(raw string) (string, error)
-	Resolve(id string) (string, error)
+	Shorten(ctx context.Context, raw string) (string, error)
+	Resolve(ctx context.Context, id string) (string, error)
 }
 
 type Handler struct {
@@ -44,7 +45,7 @@ func (h *Handler) Shortify(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to read body", http.StatusBadRequest)
 		return
 	}
-	shortURL, err := h.rs.Shorten(string(raw))
+	shortURL, err := h.rs.Shorten(r.Context(), string(raw))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -67,7 +68,7 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	target, err := h.rs.Resolve(id)
+	target, err := h.rs.Resolve(r.Context(), id)
 	if err != nil {
 		http.Error(w, "URL not found", http.StatusNotFound)
 		return
@@ -104,7 +105,7 @@ func (h *Handler) ShortifyJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shortURL, err := h.rs.Shorten(u.URL)
+	shortURL, err := h.rs.Shorten(r.Context(), u.URL)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -115,7 +116,6 @@ func (h *Handler) ShortifyJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
-	
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(resp); err != nil {
 		http.Error(w, "error encoding response", http.StatusInternalServerError)

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -27,14 +28,14 @@ type mockShortener struct {
 	resolveFn func(id string) (string, error)
 }
 
-func (m *mockShortener) Shorten(raw string) (string, error) {
+func (m *mockShortener) Shorten(ctx context.Context, raw string) (string, error) {
 	if m.shortenFn == nil {
 		return "", nil
 	}
 	return m.shortenFn(raw)
 }
 
-func (m *mockShortener) Resolve(id string) (string, error) {
+func (m *mockShortener) Resolve(ctx context.Context, id string) (string, error) {
 	if m.resolveFn == nil {
 		return "", nil
 	}

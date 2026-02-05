@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -14,10 +15,10 @@ var (
 )
 
 type Storage interface {
-	GetIDByURL(u string) (string, bool)
-	GetURLByID(id string) (string, bool)
-	Save(id, u string)
-	HasID(id string) bool
+	GetIDByURL(ctx context.Context, u string) (string, error)
+	GetURLByID(ctx context.Context, id string) (string, error)
+	Save(ctx context.Context, id, u string) error
+	HasID(ctx context.Context, id string) (bool, error)
 }
 
 type Service struct {
@@ -30,39 +31,56 @@ func New(storage Storage) *Service {
 	}
 }
 
-func (s *Service) Shorten(raw string) (string, error) {
+func (s *Service) Shorten(ctx context.Context, raw string) (string, error) {
 	u, err := normalizeURL(raw)
 	if err != nil {
 		return "", ErrInvalidURL
 	}
 
-	if id, ok := s.storage.GetIDByURL(u); ok {
+	id, err := s.storage.GetIDByURL(ctx, u)
+	if err != nil {
+		return "", err
+	}
+
+	if id != "" {
 		return id, nil
 	}
 
 	for {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		default:
+		}
 		id, err := generateID(16)
 		if err != nil {
 			return "", err
 		}
-		if s.storage.HasID(id) {
+		ok, err := s.storage.HasID(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		if ok {
 			continue
 		}
-		s.storage.Save(id, u)
+		err = s.storage.Save(ctx, id, u)
+		if err != nil {
+			return "", err
+		}
 		return id, nil
 	}
 
 }
 
-func (s *Service) Resolve(id string) (string, error) {
+func (s *Service) Resolve(ctx context.Context, id string) (string, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return "", ErrNotFound
 	}
 
-	u, ok := s.storage.GetURLByID(id)
-	if !ok {
-		return "", ErrNotFound
+	u, err := s.storage.GetURLByID(ctx, id)
+	if err != nil {
+		return "", err
 	}
 	return u, nil
 }

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"os"
@@ -10,9 +11,9 @@ import (
 )
 
 type Storage interface {
-	Save(id, u string)
-	HasID(id string) bool
-	GetAllIDToURLs() map[string]string
+	Save(ctx context.Context, id, u string) error
+	HasID(ctx context.Context, id string) (bool, error)
+	GetAllIDToURLs(ctx context.Context) (map[string]string, error)
 }
 
 type URL struct {
@@ -41,7 +42,7 @@ func NewFileStorage(filename string, storage Storage) (*FileStorage, error) {
 	}, nil
 }
 
-func (f *FileStorage) Restore() error {
+func (f *FileStorage) Restore(ctx context.Context) error {
 	logger.Log.Sugar().Info("Восстановление началось")
 	var urls []URL
 	err := f.decoder.Decode(&urls)
@@ -51,14 +52,26 @@ func (f *FileStorage) Restore() error {
 	}
 
 	for _, url := range urls {
-		if !f.storage.HasID(url.ShortURL) {
-			f.storage.Save(url.ShortURL, url.OriginalURL)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		ok, err := f.storage.HasID(ctx, url.ShortURL)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			err := f.storage.Save(ctx, url.ShortURL, url.OriginalURL)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-func (f *FileStorage) Save() error {
+func (f *FileStorage) Save(ctx context.Context) error {
 	logger.Log.Sugar().Info("Сохранение началось")
 
 	if err := f.file.Truncate(0); err != nil {
@@ -68,13 +81,15 @@ func (f *FileStorage) Save() error {
 		return err
 	}
 
-	data := f.storage.GetAllIDToURLs()
+	data, err := f.storage.GetAllIDToURLs(ctx)
+	if err != nil {
+		return err
+	}
 	urls := make([]URL, 0, len(data))
 
 	for id, url := range data {
-		uuid := uuid.New()
 		urls = append(urls, URL{
-			UUID:        uuid,
+			UUID:        uuid.New(),
 			ShortURL:    id,
 			OriginalURL: url,
 		})

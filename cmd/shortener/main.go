@@ -34,21 +34,23 @@ func main() {
 	st := storage.NewMemoryStore()
 
 	fs, err := storage.NewFileStorage(cfg.FileStorage, st)
+	if err != nil {
+		logger.Log.Sugar().Fatal(err.Error())
+	}
 	defer func ()  {
 		err := fs.Close()
 		if err != nil {
 			logger.Log.Sugar().Fatal(err.Error())
 		}
 	}()
-	if err != nil {
-		logger.Log.Sugar().Fatal(err.Error())
-	}
 
-	if err := fs.Restore(); err != nil {
+	if err := fs.Restore(context.Background()); err != nil {
 		logger.Log.Sugar().Fatal(err.Error())
 	}
 	defer func ()  {
-		err := fs.Save()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err := fs.Save(ctx)
 		if err != nil {
 			logger.Log.Sugar().Fatal(err.Error())
 		}
