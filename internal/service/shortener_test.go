@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -14,25 +15,32 @@ type fakeStorage struct {
 	lastURLSaved string
 }
 
-func (f *fakeStorage) GetIDByURL(u string) (string, bool) {
+func (f *fakeStorage) GetIDByURL(ctx context.Context, u string) (string, error) {
 	id, ok := f.urlToID[u]
-	return id, ok
+	if !ok {
+		return "", nil
+	}
+	return id, nil
 }
 
-func (f *fakeStorage) GetURLByID(id string) (string, bool) {
+func (f *fakeStorage) GetURLByID(ctx context.Context, id string) (string, error) {
 	u, ok := f.idToURL[id]
-	return u, ok
+	if !ok {
+		return "", ErrNotFound
+	}
+	return u, nil
 }
 
-func (f *fakeStorage) Save(id, u string) {
+func (f *fakeStorage) Save(ctx context.Context, id, u string) error {
 	f.idToURL[id] = u
 	f.urlToID[u] = id
 	f.lastURLSaved = u
+	return nil
 }
 
-func (f *fakeStorage) HasID(id string) bool {
+func (f *fakeStorage) HasID(ctx context.Context, id string) (bool, error) {
 	_, ok := f.idToURL[id]
-	return ok
+	return ok, nil
 }
 
 func TestServise_Resolve(t *testing.T) {
@@ -73,7 +81,7 @@ func TestServise_Resolve(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := New(&tt.fs)
-			u, err := svc.Resolve(tt.id)
+			u, err := svc.Resolve(context.Background(), tt.id)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -138,7 +146,7 @@ func TestServise_Shorten(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := New(&tt.fs)
-			id, err := svc.Shorten(tt.url)
+			id, err := svc.Shorten(context.Background(), tt.url)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
