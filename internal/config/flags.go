@@ -41,6 +41,7 @@ func ParseFlags(cfg *Config) error {
 		cfg.FileStorage = filename
 		return nil
 	})
+	flag.StringVar(&cfg.DBURL, "d", "", "URL for connecting to DB")
 
 	flag.Parse()
 	return nil

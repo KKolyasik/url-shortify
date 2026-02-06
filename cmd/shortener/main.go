@@ -32,6 +32,7 @@ func main() {
 	en := encoding.NewGzip(gzip.BestCompression)
 
 	st := storage.NewMemoryStore()
+	db := storage.NewPostgresDB(cfg.DBURL)
 
 	fs, err := storage.NewFileStorage(cfg.FileStorage, st)
 	if err != nil {
@@ -59,6 +60,7 @@ func main() {
 	svc := service.New(st)
 
 	h := handler.New(cfg.URLAddr, svc)
+	hch := handler.NewHealthCheckHandler(db)
 
 	router := gin.Default()
 	router.Use(ginmw.RequestLogger(logger.Log.Sugar()))
@@ -67,6 +69,8 @@ func main() {
 	router.POST("/api/shorten", transport.GinShortifyJSON(h))
 	router.POST("/", transport.GinShortify(h))
 	router.GET("/:id", transport.GinRedirect(h))
+
+	router.GET("/ping", gin.WrapF(hch.HealthCheck))
 
 	srv := &http.Server{
 		Addr:    cfg.Addr.String(),
