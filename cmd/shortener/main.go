@@ -60,6 +60,7 @@ func main() {
 		if err != nil {
 			logger.Log.Sugar().Error("Не удалось восстановить данные из файла")
 		}
+		defer fs.Close()
 	default:
 		logger.Log.Info("Используем только in-memory хранилище")
 		memoryStore := storage.NewMemoryStore()
@@ -67,7 +68,7 @@ func main() {
 		pinger = &noopPinger{}
 	}
 
-	if cfg.FileStorage != "" {
+	if fs != nil {
 		defer func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
