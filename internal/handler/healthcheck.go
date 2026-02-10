@@ -3,15 +3,15 @@ package handler
 import "net/http"
 
 
-type DB interface {
+type Pinger interface {
 	Ping() error
 }
 
 type HealthCheckHandler struct {
-	DB DB
+	DB Pinger
 }
 
-func NewHealthCheckHandler(db DB) *HealthCheckHandler {
+func NewHealthCheckHandler(db Pinger) *HealthCheckHandler {
 	return &HealthCheckHandler{
 		DB: db,
 	}

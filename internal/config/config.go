@@ -22,7 +22,7 @@ func NewConfig() Config {
 			Port: 8080,
 		},
 		URLAddr:           "http://localhost:8080",
-		FileStorage:       "urls.txt",
+		FileStorage:       "",
 		ReadHeaderTimeout: 2 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

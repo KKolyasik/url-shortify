@@ -20,6 +20,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type noopPinger struct{}
+
+func (p *noopPinger) Ping() error { return nil }
+
 func main() {
 	logger.Initialize("Info")
 	defer logger.Log.Sync()
@@ -31,36 +35,53 @@ func main() {
 
 	en := encoding.NewGzip(gzip.BestCompression)
 
-	st := storage.NewMemoryStore()
-	db := storage.NewPostgresDB(cfg.DBURL)
+	var (
+		st     service.Storage
+		fs     *storage.FileStorage
+		pinger handler.Pinger
+	)
 
-	fs, err := storage.NewFileStorage(cfg.FileStorage, st)
-	if err != nil {
-		logger.Log.Sugar().Fatal(err.Error())
-	}
-	defer func ()  {
-		err := fs.Close()
+	switch {
+	case cfg.DBURL != "":
+		logger.Log.Info("Подключаемся к БД")
+		db := storage.NewPostgresDB(cfg.DBURL)
+		st = db
+		pinger = db
+	case cfg.FileStorage != "":
+		logger.Log.Info("Используем файл для хранения ссылок")
+		memoryStore := storage.NewMemoryStore()
+		st = memoryStore
+		fs, err = storage.NewFileStorage(cfg.FileStorage, memoryStore)
+		pinger = &noopPinger{}
 		if err != nil {
 			logger.Log.Sugar().Fatal(err.Error())
 		}
-	}()
-
-	if err := fs.Restore(context.Background()); err != nil {
-		logger.Log.Sugar().Fatal(err.Error())
-	}
-	defer func ()  {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		err := fs.Save(ctx)
+		err = fs.Restore(context.Background())
 		if err != nil {
-			logger.Log.Sugar().Fatal(err.Error())
+			logger.Log.Sugar().Error("Не удалось восстановить данные из файла")
 		}
-	}()
+	default:
+		logger.Log.Info("Используем только in-memory хранилище")
+		memoryStore := storage.NewMemoryStore()
+		st = memoryStore
+		pinger = &noopPinger{}
+	}
+
+	if cfg.FileStorage != "" {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			err := fs.Save(ctx)
+			if err != nil {
+				logger.Log.Sugar().Fatal(err.Error())
+			}
+		}()
+	}
 
 	svc := service.New(st)
 
 	h := handler.New(cfg.URLAddr, svc)
-	hch := handler.NewHealthCheckHandler(db)
+	hch := handler.NewHealthCheckHandler(pinger)
 
 	router := gin.Default()
 	router.Use(ginmw.RequestLogger(logger.Log.Sugar()))
@@ -73,12 +94,12 @@ func main() {
 	router.GET("/ping", gin.WrapF(hch.HealthCheck))
 
 	srv := &http.Server{
-		Addr:    cfg.Addr.String(),
-		Handler: router,
+		Addr:              cfg.Addr.String(),
+		Handler:           router,
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
-		ReadTimeout: cfg.ReadTimeout,
-		WriteTimeout: cfg.WriteTimeout,
-		IdleTimeout: cfg.IdleTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
 	}
 
 	go func() {
