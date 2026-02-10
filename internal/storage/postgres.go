@@ -5,8 +5,11 @@ import (
 	"database/sql"
 
 	"github.com/KKolyasik/url-shortify/internal/logger"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 type PostgresDB struct {
@@ -16,7 +19,11 @@ type PostgresDB struct {
 func NewPostgresDB(url string) *PostgresDB {
 	db, err := sql.Open("pgx", url)
 	if err != nil {
-		logger.Log.Sugar().Fatalw("Неудалось подключиться к БД", "err", err)
+		logger.Log.Sugar().Fatalw("Не удалось подключиться к БД", "err", err)
+	}
+	err = runMigrations(db)
+	if err != nil {
+		logger.Log.Sugar().Fatalw("Не удалось выполнить миграции", "err", err)
 	}
 	return &PostgresDB{
 		db: db,
@@ -71,4 +78,20 @@ func (p *PostgresDB) HasID(ctx context.Context, id string) (bool, error) {
 		return false, err
 	}
 	return exists, nil
+}
+
+func runMigrations(db *sql.DB) error {
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	if err != nil {
+		return err
+	}
+	m, err := migrate.NewWithDatabaseInstance("file://migrations", "postgres", driver)
+	if err != nil {
+		return err
+	}
+	err = m.Up()
+	if err == migrate.ErrNoChange {
+		return nil
+	}
+	return err
 }
