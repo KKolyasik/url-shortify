@@ -161,7 +161,7 @@ func (h *Handler) ShortenBatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		resp.CorrelationId = batch.CorrelationId
+		resp.CorrelationID = batch.CorrelationID
 		resp.ShortURL = h.BaseURL + "/" + shortURL
 
 		response = append(response, resp)
