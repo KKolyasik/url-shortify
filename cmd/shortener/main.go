@@ -89,6 +89,7 @@ func main() {
 	router.Use(gin.Recovery())
 	router.Use(ginmw.GinContentEncoding(logger.Log.Sugar(), en))
 	router.POST("/api/shorten", transport.GinShortifyJSON(h))
+	router.POST("/api/shorten/batch", transport.GinShortifyBatch(h))
 	router.POST("/", transport.GinShortify(h))
 	router.GET("/:id", transport.GinRedirect(h))
 
