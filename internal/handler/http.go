@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/KKolyasik/url-shortify/internal/domainerr"
 	"github.com/KKolyasik/url-shortify/internal/model"
 )
 
@@ -47,6 +48,13 @@ func (h *Handler) Shortify(w http.ResponseWriter, r *http.Request) {
 	}
 	shortURL, err := h.rs.Shorten(r.Context(), string(raw))
 	if err != nil {
+		var existsErr *domainerr.URLAlreadyExistsError
+		if errors.As(err, &existsErr) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte(h.BaseURL + "/" + existsErr.ShortCode))
+			return
+		}
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -107,6 +115,20 @@ func (h *Handler) ShortifyJSON(w http.ResponseWriter, r *http.Request) {
 
 	shortURL, err := h.rs.Shorten(r.Context(), u.URL)
 	if err != nil {
+		var existsErr *domainerr.URLAlreadyExistsError
+		if errors.As(err, &existsErr) {
+			resp := model.URLResponse{Result: h.BaseURL + "/" + existsErr.ShortCode}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+
+			enc := json.NewEncoder(w)
+			if err := enc.Encode(resp); err != nil {
+				http.Error(w, "error encoding response", http.StatusInternalServerError)
+				return
+			}
+			return
+		}
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

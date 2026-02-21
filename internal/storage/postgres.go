@@ -3,12 +3,16 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 
+	"github.com/KKolyasik/url-shortify/internal/domainerr"
 	"github.com/KKolyasik/url-shortify/internal/logger"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -65,6 +69,19 @@ func (p *PostgresDB) Save(ctx context.Context, id, u string) error {
 	VALUES ($1, $2, $3)`
 	_, err := p.db.ExecContext(ctx, query, uuid.New(), u, id)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			switch pgErr.ConstraintName {
+			case "urls_original_url_key":
+				existingID, lookupErr := p.GetIDByURL(ctx, u)
+				if lookupErr != nil {
+					return lookupErr
+				}
+				return &domainerr.URLAlreadyExistsError{ShortCode: existingID}
+			case "urls_short_code_key":
+				return domainerr.ErrShortCodeCollision
+			}
+		}
 		return err
 	}
 	return nil
