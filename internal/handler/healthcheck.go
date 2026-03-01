@@ -1,10 +1,13 @@
 package handler
 
-import "net/http"
+import (
+	"context"
+	"net/http"
+)
 
 
 type Pinger interface {
-	Ping() error
+	Ping(ctx context.Context) error
 }
 
 type HealthCheckHandler struct {
@@ -18,7 +21,7 @@ func NewHealthCheckHandler(db Pinger) *HealthCheckHandler {
 }
 
 func (h *HealthCheckHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
-	if err := h.DB.Ping(); err != nil {
+	if err := h.DB.Ping(r.Context()); err != nil {
 		http.Error(w, "DB connect error", http.StatusInternalServerError)
 		return
 	}

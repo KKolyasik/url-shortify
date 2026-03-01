@@ -22,7 +22,7 @@ import (
 
 type noopPinger struct{}
 
-func (p *noopPinger) Ping() error { return nil }
+func (p *noopPinger) Ping(_ context.Context) error { return nil }
 
 func main() {
 	logger.Initialize("Info")
@@ -44,7 +44,7 @@ func main() {
 	switch {
 	case cfg.DBURL != "":
 		logger.Log.Info("Подключаемся к БД")
-		db := storage.NewPostgresDB(cfg.DBURL)
+		db := storage.NewPostgresDB(context.Background(), cfg.DBURL)
 		st = db
 		pinger = db
 	case cfg.FileStorage != "":
