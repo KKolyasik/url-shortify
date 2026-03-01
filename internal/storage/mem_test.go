@@ -2,8 +2,10 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/KKolyasik/url-shortify/internal/domainerr"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -26,7 +28,8 @@ func TestMemoryStore_Empty(t *testing.T) {
 func TestMemoryStore_SaveAndGet(t *testing.T) {
 	s := NewMemoryStore()
 
-	s.Save(context.Background(), "id1", "http://example.com/")
+	err := s.Save(context.Background(), "id1", "http://example.com/")
+	assert.NoError(t, err)
 
 	u, err := s.GetURLByID(context.Background(), "id1")
 	assert.NoError(t, err)
@@ -48,16 +51,18 @@ func TestMemoryStore_SaveAndGet(t *testing.T) {
 func TestMemoryStore_SaveOverwriteSameID(t *testing.T) {
 	s := NewMemoryStore()
 
-	s.Save(context.Background(), "id1", "http://a.com/")
-	s.Save(context.Background(), "id1", "http://b.com/")
+	err := s.Save(context.Background(), "id1", "http://a.com/")
+	assert.NoError(t, err)
+	err = s.Save(context.Background(), "id1", "http://b.com/")
+	assert.ErrorIs(t, err, domainerr.ErrShortCodeCollision)
 
 	u, err := s.GetURLByID(context.Background(), "id1")
 	assert.NoError(t, err)
-	assert.Equal(t, "http://b.com/", u)
+	assert.Equal(t, "http://a.com/", u)
 
 	id, err := s.GetIDByURL(context.Background(), "http://b.com/")
 	assert.NoError(t, err)
-	assert.Equal(t, "id1", id)
+	assert.Equal(t, "", id)
 
 	oldID, err := s.GetIDByURL(context.Background(), "http://a.com/")
 	assert.NoError(t, err)
@@ -67,16 +72,21 @@ func TestMemoryStore_SaveOverwriteSameID(t *testing.T) {
 func TestMemoryStore_SaveOverwriteSameURL(t *testing.T) {
 	s := NewMemoryStore()
 
-	s.Save(context.Background(), "id1", "http://a.com/")
-	s.Save(context.Background(), "id2", "http://a.com/")
+	err := s.Save(context.Background(), "id1", "http://a.com/")
+	assert.NoError(t, err)
+	err = s.Save(context.Background(), "id2", "http://a.com/")
+
+	var existsErr *domainerr.URLAlreadyExistsError
+	assert.True(t, errors.As(err, &existsErr))
+	assert.Equal(t, "id1", existsErr.ShortCode)
 
 	id, err := s.GetIDByURL(context.Background(), "http://a.com/")
 	assert.NoError(t, err)
-	assert.Equal(t, "id2", id)
+	assert.Equal(t, "id1", id)
 
 	u, err := s.GetURLByID(context.Background(), "id2")
-	assert.NoError(t, err)
-	assert.Equal(t, "http://a.com/", u)
+	assert.ErrorIs(t, err, ErrURLNotFound)
+	assert.Equal(t, "", u)
 
 	u1, err := s.GetURLByID(context.Background(), "id1")
 	assert.NoError(t, err)

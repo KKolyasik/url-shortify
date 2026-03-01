@@ -20,6 +20,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type noopPinger struct{}
+
+func (p *noopPinger) Ping(_ context.Context) error { return nil }
+
 func main() {
 	logger.Initialize("Info")
 	defer logger.Log.Sync()
@@ -31,50 +35,73 @@ func main() {
 
 	en := encoding.NewGzip(gzip.BestCompression)
 
-	st := storage.NewMemoryStore()
+	var (
+		st     service.Storage
+		fs     *storage.FileStorage
+		pinger handler.Pinger
+	)
 
-	fs, err := storage.NewFileStorage(cfg.FileStorage, st)
-	if err != nil {
-		logger.Log.Sugar().Fatal(err.Error())
-	}
-	defer func ()  {
-		err := fs.Close()
+	switch {
+	case cfg.DBURL != "":
+		logger.Log.Info("Подключаемся к БД")
+		db := storage.NewPostgresDB(context.Background(), cfg.DBURL)
+		st = db
+		pinger = db
+	case cfg.FileStorage != "":
+		logger.Log.Info("Используем файл для хранения ссылок")
+		memoryStore := storage.NewMemoryStore()
+		st = memoryStore
+		fs, err = storage.NewFileStorage(cfg.FileStorage, memoryStore)
+		pinger = &noopPinger{}
 		if err != nil {
 			logger.Log.Sugar().Fatal(err.Error())
 		}
-	}()
-
-	if err := fs.Restore(context.Background()); err != nil {
-		logger.Log.Sugar().Fatal(err.Error())
-	}
-	defer func ()  {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		err := fs.Save(ctx)
+		err = fs.Restore(context.Background())
 		if err != nil {
-			logger.Log.Sugar().Fatal(err.Error())
+			logger.Log.Sugar().Error("Не удалось восстановить данные из файла")
 		}
-	}()
+		defer fs.Close()
+	default:
+		logger.Log.Info("Используем только in-memory хранилище")
+		memoryStore := storage.NewMemoryStore()
+		st = memoryStore
+		pinger = &noopPinger{}
+	}
+
+	if fs != nil {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			err := fs.Save(ctx)
+			if err != nil {
+				logger.Log.Sugar().Fatal(err.Error())
+			}
+		}()
+	}
 
 	svc := service.New(st)
 
 	h := handler.New(cfg.URLAddr, svc)
+	hch := handler.NewHealthCheckHandler(pinger)
 
 	router := gin.Default()
 	router.Use(ginmw.RequestLogger(logger.Log.Sugar()))
 	router.Use(gin.Recovery())
 	router.Use(ginmw.GinContentEncoding(logger.Log.Sugar(), en))
 	router.POST("/api/shorten", transport.GinShortifyJSON(h))
+	router.POST("/api/shorten/batch", transport.GinShortifyBatch(h))
 	router.POST("/", transport.GinShortify(h))
 	router.GET("/:id", transport.GinRedirect(h))
 
+	router.GET("/ping", gin.WrapF(hch.HealthCheck))
+
 	srv := &http.Server{
-		Addr:    cfg.Addr.String(),
-		Handler: router,
+		Addr:              cfg.Addr.String(),
+		Handler:           router,
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
-		ReadTimeout: cfg.ReadTimeout,
-		WriteTimeout: cfg.WriteTimeout,
-		IdleTimeout: cfg.IdleTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
 	}
 
 	go func() {

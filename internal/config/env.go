@@ -15,6 +15,7 @@ type Settings struct {
 	ReadTimeout       time.Duration `env:"READ_TIMEOUT"`
 	WriteTimeout      time.Duration `env:"WRITE_TIMEOUT"`
 	IdleTimeout       time.Duration `env:"IDLE_TIMEOUT"`
+	DBURL             string        `env:"DATABASE_DSN"`
 }
 
 func ParseEnv(cfg *Config) error {
@@ -60,6 +61,10 @@ func ParseEnv(cfg *Config) error {
 
 	if _, ok := os.LookupEnv("IDLE_TIMEOUT"); ok {
 		cfg.ReadHeaderTimeout = s.IdleTimeout
+	}
+
+	if _, ok := os.LookupEnv("DATABASE_DSN"); ok {
+		cfg.DBURL = s.DBURL
 	}
 
 	return nil

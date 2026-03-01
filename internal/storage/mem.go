@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"sync"
+
+	"github.com/KKolyasik/url-shortify/internal/domainerr"
 )
 
 var (
@@ -62,6 +64,14 @@ func (m *MemoryStore) Save(ctx context.Context, id, u string) error {
 		return ctx.Err()
 	default:
 	}
+
+	if existingID, ok := m.urlToID[u]; ok {
+		return &domainerr.URLAlreadyExistsError{ShortCode: existingID}
+	}
+	if _, ok := m.idToURL[id]; ok {
+		return domainerr.ErrShortCodeCollision
+	}
+
 	m.idToURL[id] = u
 	m.urlToID[u] = id
 	return nil

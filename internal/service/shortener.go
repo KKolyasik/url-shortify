@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net/url"
 	"strings"
+
+	"github.com/KKolyasik/url-shortify/internal/domainerr"
 )
 
 var (
@@ -15,7 +17,6 @@ var (
 )
 
 type Storage interface {
-	GetIDByURL(ctx context.Context, u string) (string, error)
 	GetURLByID(ctx context.Context, id string) (string, error)
 	Save(ctx context.Context, id, u string) error
 	HasID(ctx context.Context, id string) (bool, error)
@@ -37,15 +38,6 @@ func (s *Service) Shorten(ctx context.Context, raw string) (string, error) {
 		return "", ErrInvalidURL
 	}
 
-	id, err := s.storage.GetIDByURL(ctx, u)
-	if err != nil {
-		return "", err
-	}
-
-	if id != "" {
-		return id, nil
-	}
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -65,11 +57,13 @@ func (s *Service) Shorten(ctx context.Context, raw string) (string, error) {
 		}
 		err = s.storage.Save(ctx, id, u)
 		if err != nil {
+			if errors.Is(err, domainerr.ErrShortCodeCollision) {
+				continue
+			}
 			return "", err
 		}
 		return id, nil
 	}
-
 }
 
 func (s *Service) Resolve(ctx context.Context, id string) (string, error) {

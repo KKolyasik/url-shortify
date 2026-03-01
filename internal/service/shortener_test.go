@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/KKolyasik/url-shortify/internal/domainerr"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -13,14 +15,6 @@ type fakeStorage struct {
 	urlToID map[string]string
 
 	lastURLSaved string
-}
-
-func (f *fakeStorage) GetIDByURL(ctx context.Context, u string) (string, error) {
-	id, ok := f.urlToID[u]
-	if !ok {
-		return "", nil
-	}
-	return id, nil
 }
 
 func (f *fakeStorage) GetURLByID(ctx context.Context, id string) (string, error) {
@@ -32,6 +26,13 @@ func (f *fakeStorage) GetURLByID(ctx context.Context, id string) (string, error)
 }
 
 func (f *fakeStorage) Save(ctx context.Context, id, u string) error {
+	if existingID, ok := f.urlToID[u]; ok {
+		return &domainerr.URLAlreadyExistsError{ShortCode: existingID}
+	}
+	if _, ok := f.idToURL[id]; ok {
+		return domainerr.ErrShortCodeCollision
+	}
+
 	f.idToURL[id] = u
 	f.urlToID[u] = id
 	f.lastURLSaved = u
@@ -124,21 +125,21 @@ func TestServise_Shorten(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "wrong url",
-			url: "http://",
-			length: 0,
+			name:    "wrong url",
+			url:     "http://",
+			length:  0,
 			wantErr: true,
 		},
 		{
-			name: "wrong url2",
-			url: "http",
-			length: 0,
+			name:    "wrong url2",
+			url:     "http",
+			length:  0,
 			wantErr: true,
 		},
 		{
-			name: "wrong url3",
-			url: "",
-			length: 0,
+			name:    "wrong url3",
+			url:     "",
+			length:  0,
 			wantErr: true,
 		},
 	}
@@ -157,4 +158,23 @@ func TestServise_Shorten(t *testing.T) {
 			assert.False(t, strings.Contains(id, "="))
 		})
 	}
+}
+
+func TestService_Shorten_DuplicateOriginalURL(t *testing.T) {
+	fs := fakeStorage{
+		idToURL: map[string]string{
+			"id1": "http://example.com",
+		},
+		urlToID: map[string]string{
+			"http://example.com": "id1",
+		},
+	}
+
+	svc := New(&fs)
+	id, err := svc.Shorten(context.Background(), "http://example.com")
+	assert.Empty(t, id)
+
+	var existsErr *domainerr.URLAlreadyExistsError
+	assert.True(t, errors.As(err, &existsErr))
+	assert.Equal(t, "id1", existsErr.ShortCode)
 }

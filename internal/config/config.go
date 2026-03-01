@@ -1,6 +1,8 @@
 package config
 
-import "time"
+import (
+	"time"
+)
 
 type Config struct {
 	Addr              NetAddress
@@ -10,6 +12,7 @@ type Config struct {
 	ReadTimeout       time.Duration
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
+	DBURL             string
 }
 
 func NewConfig() Config {
@@ -19,7 +22,7 @@ func NewConfig() Config {
 			Port: 8080,
 		},
 		URLAddr:           "http://localhost:8080",
-		FileStorage:       "urls.txt",
+		FileStorage:       "",
 		ReadHeaderTimeout: 2 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

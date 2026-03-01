@@ -14,8 +14,12 @@ type Redirector interface {
 	Redirect(http.ResponseWriter, *http.Request, string)
 }
 
-type JSONShortifyer interface{
+type JSONShortifyer interface {
 	ShortifyJSON(http.ResponseWriter, *http.Request)
+}
+
+type BatchShortifyer interface {
+	ShortenBatch(w http.ResponseWriter, r *http.Request)
 }
 
 func GinShortify(s Shortifyer) gin.HandlerFunc {
@@ -34,5 +38,11 @@ func GinRedirect(r Redirector) gin.HandlerFunc {
 func GinShortifyJSON(s JSONShortifyer) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		s.ShortifyJSON(ctx.Writer, ctx.Request)
+	}
+}
+
+func GinShortifyBatch(s BatchShortifyer) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		s.ShortenBatch(ctx.Writer, ctx.Request)
 	}
 }

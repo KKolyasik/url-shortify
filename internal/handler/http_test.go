@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/KKolyasik/url-shortify/internal/domainerr"
 	"github.com/KKolyasik/url-shortify/internal/model"
 	"github.com/stretchr/testify/assert"
 )
@@ -163,6 +164,22 @@ func TestHandler_Shortify(t *testing.T) {
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
 				body:        "Shorten error\n",
+			},
+		},
+		{
+			name:        "duplicate URL -> 409 with existing short URL",
+			method:      http.MethodPost,
+			contentType: "text/plain; charset=utf-8",
+			body:        strings.NewReader("http://example.com"),
+			mock: mockShortener{
+				shortenFn: func(raw string) (string, error) {
+					return "", &domainerr.URLAlreadyExistsError{ShortCode: "abc"}
+				},
+			},
+			want: want{
+				code:        http.StatusConflict,
+				contentType: "text/plain; charset=utf-8",
+				body:        baseURL + "/" + "abc",
 			},
 		},
 	}
@@ -387,6 +404,22 @@ func TestHandler_ShortifyJSON(t *testing.T) {
 				code:        http.StatusBadRequest,
 				contentType: "text/plain; charset=utf-8",
 				body:        "Shorten error\n",
+			},
+		},
+		{
+			name:        "duplicate URL -> 409 with existing short URL in JSON format",
+			method:      http.MethodPost,
+			contentType: "application/json",
+			body:        strings.NewReader(marshalRequestBody("http://example.com")),
+			mock: mockShortener{
+				shortenFn: func(raw string) (string, error) {
+					return "", &domainerr.URLAlreadyExistsError{ShortCode: "abc"}
+				},
+			},
+			want: want{
+				code:        http.StatusConflict,
+				contentType: "application/json",
+				body:        marshalResponseBody(baseURL + "/" + "abc"),
 			},
 		},
 	}

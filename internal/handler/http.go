@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/KKolyasik/url-shortify/internal/domainerr"
 	"github.com/KKolyasik/url-shortify/internal/model"
 )
 
@@ -47,6 +48,13 @@ func (h *Handler) Shortify(w http.ResponseWriter, r *http.Request) {
 	}
 	shortURL, err := h.rs.Shorten(r.Context(), string(raw))
 	if err != nil {
+		var existsErr *domainerr.URLAlreadyExistsError
+		if errors.As(err, &existsErr) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte(h.BaseURL + "/" + existsErr.ShortCode))
+			return
+		}
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -107,6 +115,20 @@ func (h *Handler) ShortifyJSON(w http.ResponseWriter, r *http.Request) {
 
 	shortURL, err := h.rs.Shorten(r.Context(), u.URL)
 	if err != nil {
+		var existsErr *domainerr.URLAlreadyExistsError
+		if errors.As(err, &existsErr) {
+			resp := model.URLResponse{Result: h.BaseURL + "/" + existsErr.ShortCode}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+
+			enc := json.NewEncoder(w)
+			if err := enc.Encode(resp); err != nil {
+				http.Error(w, "error encoding response", http.StatusInternalServerError)
+				return
+			}
+			return
+		}
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -122,4 +144,57 @@ func (h *Handler) ShortifyJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+}
+
+func (h *Handler) ShortenBatch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ct := r.Header.Get("Content-Type")
+	if ct == "" || !strings.EqualFold(ct, "application/json") {
+		http.Error(w, "Content-Type must be application/json", http.StatusBadRequest)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
+	defer r.Body.Close()
+
+	var batches []model.URLBatchRequest
+	dec := json.NewDecoder(r.Body)
+
+	if err := dec.Decode(&batches); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "Cannot decode request JSON body", http.StatusBadRequest)
+		return
+	}
+
+	var response []model.URLBatchResponse
+	for _, batch := range batches {
+		var resp model.URLBatchResponse
+		shortURL, err := h.rs.Shorten(r.Context(), batch.OriginalURL)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		resp.CorrelationID = batch.CorrelationID
+		resp.ShortURL = h.BaseURL + "/" + shortURL
+
+		response = append(response, resp)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+
+	enc := json.NewEncoder(w)
+	if err := enc.Encode(response); err != nil {
+		http.Error(w, "error encoding response", http.StatusInternalServerError)
+		return
+	}
 }
