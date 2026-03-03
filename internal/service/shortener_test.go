@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/KKolyasik/url-shortify/internal/domainerr"
+	"github.com/KKolyasik/url-shortify/internal/model"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -15,6 +17,10 @@ type fakeStorage struct {
 	urlToID map[string]string
 
 	lastURLSaved string
+	lastVID      uuid.UUID
+
+	userURLs    []model.UserURLs
+	userURLsErr error
 }
 
 func (f *fakeStorage) GetURLByID(ctx context.Context, id string) (string, error) {
@@ -25,7 +31,7 @@ func (f *fakeStorage) GetURLByID(ctx context.Context, id string) (string, error)
 	return u, nil
 }
 
-func (f *fakeStorage) Save(ctx context.Context, id, u string) error {
+func (f *fakeStorage) Save(ctx context.Context, id, u string, vid uuid.UUID) error {
 	if existingID, ok := f.urlToID[u]; ok {
 		return &domainerr.URLAlreadyExistsError{ShortCode: existingID}
 	}
@@ -36,12 +42,21 @@ func (f *fakeStorage) Save(ctx context.Context, id, u string) error {
 	f.idToURL[id] = u
 	f.urlToID[u] = id
 	f.lastURLSaved = u
+	f.lastVID = vid
 	return nil
 }
 
 func (f *fakeStorage) HasID(ctx context.Context, id string) (bool, error) {
 	_, ok := f.idToURL[id]
 	return ok, nil
+}
+
+func (f *fakeStorage) GetURLIDByUser(ctx context.Context, vid uuid.UUID) ([]model.UserURLs, error) {
+	f.lastVID = vid
+	if f.userURLsErr != nil {
+		return nil, f.userURLsErr
+	}
+	return f.userURLs, nil
 }
 
 func TestServise_Resolve(t *testing.T) {
@@ -94,6 +109,7 @@ func TestServise_Resolve(t *testing.T) {
 }
 
 func TestServise_Shorten(t *testing.T) {
+	vid := uuid.New()
 	tests := []struct {
 		name    string
 		fs      fakeStorage
@@ -147,7 +163,7 @@ func TestServise_Shorten(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := New(&tt.fs)
-			id, err := svc.Shorten(context.Background(), tt.url)
+			id, err := svc.Shorten(context.Background(), tt.url, vid)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -161,6 +177,7 @@ func TestServise_Shorten(t *testing.T) {
 }
 
 func TestService_Shorten_DuplicateOriginalURL(t *testing.T) {
+	vid := uuid.New()
 	fs := fakeStorage{
 		idToURL: map[string]string{
 			"id1": "http://example.com",
@@ -171,10 +188,42 @@ func TestService_Shorten_DuplicateOriginalURL(t *testing.T) {
 	}
 
 	svc := New(&fs)
-	id, err := svc.Shorten(context.Background(), "http://example.com")
+	id, err := svc.Shorten(context.Background(), "http://example.com", vid)
 	assert.Empty(t, id)
 
 	var existsErr *domainerr.URLAlreadyExistsError
 	assert.True(t, errors.As(err, &existsErr))
 	assert.Equal(t, "id1", existsErr.ShortCode)
+}
+
+func TestService_UserResolve(t *testing.T) {
+	vid := uuid.New()
+
+	t.Run("success", func(t *testing.T) {
+		want := []model.UserURLs{
+			{OriginalURL: "http://example.com/a", ShortCode: "abc"},
+			{OriginalURL: "http://example.com/b", ShortCode: "xyz"},
+		}
+		fs := fakeStorage{
+			userURLs: want,
+		}
+
+		svc := New(&fs)
+		got, err := svc.UserResolve(context.Background(), vid)
+		assert.NoError(t, err)
+		assert.Equal(t, want, got)
+		assert.Equal(t, vid, fs.lastVID)
+	})
+
+	t.Run("storage error", func(t *testing.T) {
+		fs := fakeStorage{
+			userURLsErr: errors.New("storage error"),
+		}
+
+		svc := New(&fs)
+		got, err := svc.UserResolve(context.Background(), vid)
+		assert.Error(t, err)
+		assert.Nil(t, got)
+		assert.Equal(t, vid, fs.lastVID)
+	})
 }

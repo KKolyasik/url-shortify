@@ -88,10 +88,12 @@ func main() {
 	router.Use(ginmw.RequestLogger(logger.Log.Sugar()))
 	router.Use(gin.Recovery())
 	router.Use(ginmw.GinContentEncoding(logger.Log.Sugar(), en))
+	router.Use(ginmw.GinAuthorization(&cfg))
 	router.POST("/api/shorten", transport.GinShortifyJSON(h))
 	router.POST("/api/shorten/batch", transport.GinShortifyBatch(h))
 	router.POST("/", transport.GinShortify(h))
 	router.GET("/:id", transport.GinRedirect(h))
+	router.GET("/api/user/urls", transport.GinUserURLS(h))
 
 	router.GET("/ping", gin.WrapF(hch.HealthCheck))
 

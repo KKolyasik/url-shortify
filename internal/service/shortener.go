@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/KKolyasik/url-shortify/internal/domainerr"
+	"github.com/KKolyasik/url-shortify/internal/model"
+	"github.com/google/uuid"
 )
 
 var (
@@ -18,8 +20,9 @@ var (
 
 type Storage interface {
 	GetURLByID(ctx context.Context, id string) (string, error)
-	Save(ctx context.Context, id, u string) error
+	Save(ctx context.Context, id, u string, vid uuid.UUID) error
 	HasID(ctx context.Context, id string) (bool, error)
+	GetURLIDByUser(ctx context.Context, vid uuid.UUID) ([]model.UserURLs, error)
 }
 
 type Service struct {
@@ -32,7 +35,7 @@ func New(storage Storage) *Service {
 	}
 }
 
-func (s *Service) Shorten(ctx context.Context, raw string) (string, error) {
+func (s *Service) Shorten(ctx context.Context, raw string, vid uuid.UUID) (string, error) {
 	u, err := normalizeURL(raw)
 	if err != nil {
 		return "", ErrInvalidURL
@@ -55,7 +58,7 @@ func (s *Service) Shorten(ctx context.Context, raw string) (string, error) {
 		if ok {
 			continue
 		}
-		err = s.storage.Save(ctx, id, u)
+		err = s.storage.Save(ctx, id, u, vid)
 		if err != nil {
 			if errors.Is(err, domainerr.ErrShortCodeCollision) {
 				continue
@@ -77,6 +80,15 @@ func (s *Service) Resolve(ctx context.Context, id string) (string, error) {
 		return "", err
 	}
 	return u, nil
+}
+
+func (s *Service) UserResolve(ctx context.Context, vid uuid.UUID) ([]model.UserURLs, error) {
+	urls, err := s.storage.GetURLIDByUser(ctx, vid)
+	if err != nil {
+		return nil,  err
+	}
+
+	return urls, nil
 }
 
 func generateID(nBytes int) (string, error) {

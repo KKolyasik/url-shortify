@@ -6,6 +6,7 @@ import (
 
 	"github.com/KKolyasik/url-shortify/internal/domainerr"
 	"github.com/KKolyasik/url-shortify/internal/logger"
+	"github.com/KKolyasik/url-shortify/internal/model"
 	sq "github.com/Masterminds/squirrel"
 	"github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
@@ -80,7 +81,7 @@ func (p *PostgresDB) GetURLByID(ctx context.Context, id string) (string, error) 
 	return url, nil
 }
 
-func (p *PostgresDB) Save(ctx context.Context, id, u string) error {
+func (p *PostgresDB) Save(ctx context.Context, id, u string, vid uuid.UUID) error {
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -89,8 +90,8 @@ func (p *PostgresDB) Save(ctx context.Context, id, u string) error {
 
 	query, args, err := sq.
 		Insert("urls").
-		Columns("id", "original_url", "short_code").
-		Values(uuid.New(), u, id).
+		Columns("id", "original_url", "short_code", "user_id").
+		Values(uuid.New(), u, id, vid).
 		PlaceholderFormat(sq.Dollar).
 		ToSql()
 
@@ -143,6 +144,44 @@ func (p *PostgresDB) HasID(ctx context.Context, id string) (bool, error) {
 		return false, err
 	}
 	return exists, nil
+}
+
+func (p *PostgresDB) GetURLIDByUser(ctx context.Context, vid uuid.UUID) ([]model.UserURLs, error) {
+	query, args, err := sq.
+		Select("original_url", "short_code").
+		From("urls").
+		Where(sq.Eq{"user_id": vid}).
+		PlaceholderFormat(sq.Dollar).
+		ToSql()
+
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := p.pool.Query(ctx, query, args...)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	urls := make([]model.UserURLs, 0)
+
+	for rows.Next() {
+		var url model.UserURLs
+		err = rows.Scan(&url.OriginalURL, &url.ShortCode)
+		if err != nil {
+			return nil, err
+		}
+		urls = append(urls, url)
+	}
+
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+
+	return urls, nil
 }
 
 func runMigrations(pool *pgxpool.Pool) error {

@@ -16,6 +16,8 @@ type Settings struct {
 	WriteTimeout      time.Duration `env:"WRITE_TIMEOUT"`
 	IdleTimeout       time.Duration `env:"IDLE_TIMEOUT"`
 	DBURL             string        `env:"DATABASE_DSN"`
+	SecretKey         string        `env:"SECRET_KEY"`
+	TokenTTL          time.Duration `env:"TOKEN_TTL"`
 }
 
 func ParseEnv(cfg *Config) error {
@@ -65,6 +67,14 @@ func ParseEnv(cfg *Config) error {
 
 	if _, ok := os.LookupEnv("DATABASE_DSN"); ok {
 		cfg.DBURL = s.DBURL
+	}
+
+	if _, ok := os.LookupEnv("SECRET_KEY"); ok {
+		cfg.SecretKey = s.SecretKey
+	}
+
+	if _, ok := os.LookupEnv("TOKEN_TTL"); ok {
+		cfg.TokenTTL = s.TokenTTL
 	}
 
 	return nil

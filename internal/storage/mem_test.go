@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/KKolyasik/url-shortify/internal/domainerr"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMemoryStore_Empty(t *testing.T) {
@@ -28,7 +30,7 @@ func TestMemoryStore_Empty(t *testing.T) {
 func TestMemoryStore_SaveAndGet(t *testing.T) {
 	s := NewMemoryStore()
 
-	err := s.Save(context.Background(), "id1", "http://example.com/")
+	err := s.Save(context.Background(), "id1", "http://example.com/", uuid.New())
 	assert.NoError(t, err)
 
 	u, err := s.GetURLByID(context.Background(), "id1")
@@ -51,9 +53,9 @@ func TestMemoryStore_SaveAndGet(t *testing.T) {
 func TestMemoryStore_SaveOverwriteSameID(t *testing.T) {
 	s := NewMemoryStore()
 
-	err := s.Save(context.Background(), "id1", "http://a.com/")
+	err := s.Save(context.Background(), "id1", "http://a.com/", uuid.New())
 	assert.NoError(t, err)
-	err = s.Save(context.Background(), "id1", "http://b.com/")
+	err = s.Save(context.Background(), "id1", "http://b.com/", uuid.New())
 	assert.ErrorIs(t, err, domainerr.ErrShortCodeCollision)
 
 	u, err := s.GetURLByID(context.Background(), "id1")
@@ -72,9 +74,9 @@ func TestMemoryStore_SaveOverwriteSameID(t *testing.T) {
 func TestMemoryStore_SaveOverwriteSameURL(t *testing.T) {
 	s := NewMemoryStore()
 
-	err := s.Save(context.Background(), "id1", "http://a.com/")
+	err := s.Save(context.Background(), "id1", "http://a.com/", uuid.New())
 	assert.NoError(t, err)
-	err = s.Save(context.Background(), "id2", "http://a.com/")
+	err = s.Save(context.Background(), "id2", "http://a.com/", uuid.New())
 
 	var existsErr *domainerr.URLAlreadyExistsError
 	assert.True(t, errors.As(err, &existsErr))
@@ -97,4 +99,43 @@ func TestMemoryStore_SaveOverwriteSameURL(t *testing.T) {
 
 	assert.True(t, ok1)
 	assert.True(t, ok2)
+}
+
+func TestMemoryStore_GetURLIDByUser(t *testing.T) {
+	s := NewMemoryStore()
+	vid1 := uuid.New()
+	vid2 := uuid.New()
+
+	require.NoError(t, s.Save(context.Background(), "id1", "http://a.com/", vid1))
+	require.NoError(t, s.Save(context.Background(), "id2", "http://b.com/", vid2))
+	require.NoError(t, s.Save(context.Background(), "id3", "http://c.com/", vid1))
+
+	urls, err := s.GetURLIDByUser(context.Background(), vid1)
+	require.NoError(t, err)
+	require.Len(t, urls, 2)
+
+	got := make(map[string]string, len(urls))
+	for _, u := range urls {
+		got[u.ShortCode] = u.OriginalURL
+	}
+
+	assert.Equal(t, map[string]string{
+		"id1": "http://a.com/",
+		"id3": "http://c.com/",
+	}, got)
+}
+
+func TestMemoryStore_GetAllURLs(t *testing.T) {
+	s := NewMemoryStore()
+	vid := uuid.New()
+
+	require.NoError(t, s.Save(context.Background(), "id1", "http://a.com/", vid))
+
+	urls, err := s.GetAllURLs(context.Background())
+	require.NoError(t, err)
+	require.Len(t, urls, 1)
+
+	assert.Equal(t, "id1", urls[0].ShortURL)
+	assert.Equal(t, "http://a.com/", urls[0].OriginalURL)
+	assert.Equal(t, vid, urls[0].UserID)
 }

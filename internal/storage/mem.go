@@ -3,9 +3,12 @@ package storage
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 
 	"github.com/KKolyasik/url-shortify/internal/domainerr"
+	"github.com/KKolyasik/url-shortify/internal/model"
+	"github.com/google/uuid"
 )
 
 var (
@@ -14,15 +17,17 @@ var (
 )
 
 type MemoryStore struct {
-	mu      sync.RWMutex
-	idToURL map[string]string
-	urlToID map[string]string
+	mu       sync.RWMutex
+	idToURL  map[string]string
+	urlToID  map[string]string
+	idToUser map[string]uuid.UUID
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		idToURL: make(map[string]string),
-		urlToID: make(map[string]string),
+		idToURL:  make(map[string]string),
+		urlToID:  make(map[string]string),
+		idToUser: make(map[string]uuid.UUID),
 	}
 }
 
@@ -56,7 +61,7 @@ func (m *MemoryStore) GetURLByID(ctx context.Context, id string) (string, error)
 	return u, nil
 }
 
-func (m *MemoryStore) Save(ctx context.Context, id, u string) error {
+func (m *MemoryStore) Save(ctx context.Context, id, u string, vid uuid.UUID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	select {
@@ -74,6 +79,7 @@ func (m *MemoryStore) Save(ctx context.Context, id, u string) error {
 
 	m.idToURL[id] = u
 	m.urlToID[u] = id
+	m.idToUser[id] = vid
 	return nil
 }
 
@@ -104,4 +110,69 @@ func (m *MemoryStore) GetAllIDToURLs(ctx context.Context) (map[string]string, er
 	}
 
 	return dst, nil
+}
+
+func (m *MemoryStore) GetURLIDByUser(ctx context.Context, vid uuid.UUID) ([]model.UserURLs, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	ids := make([]string, 0, len(m.idToUser))
+	for id := range m.idToUser {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	urls := make([]model.UserURLs, 0)
+	for _, id := range ids {
+		select {
+		case <-ctx.Done():
+			return urls, ctx.Err()
+		default:
+		}
+
+		if m.idToUser[id] != vid {
+			continue
+		}
+
+		originalURL, ok := m.idToURL[id]
+		if !ok {
+			continue
+		}
+
+		urls = append(urls, model.UserURLs{
+			OriginalURL: originalURL,
+			ShortCode:   id,
+		})
+	}
+
+	return urls, nil
+}
+
+func (m *MemoryStore) GetAllURLs(ctx context.Context) ([]URL, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	ids := make([]string, 0, len(m.idToURL))
+	for id := range m.idToURL {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	urls := make([]URL, 0, len(ids))
+	for _, id := range ids {
+		select {
+		case <-ctx.Done():
+			return urls, ctx.Err()
+		default:
+		}
+
+		urls = append(urls, URL{
+			UUID:        uuid.New(),
+			ShortURL:    id,
+			OriginalURL: m.idToURL[id],
+			UserID:      m.idToUser[id],
+		})
+	}
+
+	return urls, nil
 }
