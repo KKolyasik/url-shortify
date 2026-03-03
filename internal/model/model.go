@@ -1,5 +1,9 @@
 package model
 
+type ctxKey int
+
+const VisitorIDKey ctxKey = iota
+
 type URLRequest struct {
 	URL string `json:"url"`
 }

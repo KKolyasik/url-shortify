@@ -8,6 +8,7 @@ import (
 
 	"github.com/KKolyasik/url-shortify/internal/config"
 	"github.com/KKolyasik/url-shortify/internal/logger"
+	"github.com/KKolyasik/url-shortify/internal/model"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -40,7 +41,7 @@ func GinAuthorization(cfg *config.Config) gin.HandlerFunc {
 				return
 			}
 			ctx.Request = ctx.Request.WithContext(
-				context.WithValue(ctx.Request.Context(), "vid", claims.VisitorID),
+				context.WithValue(ctx.Request.Context(), model.VisitorIDKey, claims.VisitorID),
 			)
 			ctx.SetCookie("Authorization", token, int(cfg.TokenTTL.Seconds()), "/", "", false, true)
 			ctx.Next()
@@ -66,14 +67,14 @@ func GinAuthorization(cfg *config.Config) gin.HandlerFunc {
 				return
 			}
 			ctx.Request = ctx.Request.WithContext(
-				context.WithValue(ctx.Request.Context(), "vid", claims.VisitorID),
+				context.WithValue(ctx.Request.Context(), model.VisitorIDKey, claims.VisitorID),
 			)
 			ctx.SetCookie("Authorization", token, int(cfg.TokenTTL.Seconds()), "/", "", false, true)
 			ctx.Next()
 			return
 		}
 
-		ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), "vid", vid))
+		ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), model.VisitorIDKey, vid))
 		ctx.Next()
 	}
 }

@@ -82,7 +82,7 @@ func marshalUserURLsBody(urls []model.UserURLsResponse) string {
 }
 
 func withVisitorID(r *http.Request, vid uuid.UUID) *http.Request {
-	return r.WithContext(context.WithValue(r.Context(), "vid", vid))
+	return r.WithContext(context.WithValue(r.Context(), model.VisitorIDKey, vid))
 }
 
 func TestHandler_Shortify(t *testing.T) {

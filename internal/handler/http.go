@@ -49,7 +49,7 @@ func (h *Handler) Shortify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vid, ok := r.Context().Value("vid").(uuid.UUID)
+	vid, ok := r.Context().Value(model.VisitorIDKey).(uuid.UUID)
 	if !ok {
 		http.Error(w, "invalid visitor id", http.StatusUnauthorized)
 		return
@@ -122,7 +122,7 @@ func (h *Handler) ShortifyJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vid, ok := r.Context().Value("vid").(uuid.UUID)
+	vid, ok := r.Context().Value(model.VisitorIDKey).(uuid.UUID)
 	if !ok {
 		http.Error(w, "invalid visitor id", http.StatusUnauthorized)
 		return
@@ -188,7 +188,7 @@ func (h *Handler) ShortenBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vid, ok := r.Context().Value("vid").(uuid.UUID)
+	vid, ok := r.Context().Value(model.VisitorIDKey).(uuid.UUID)
 	if !ok {
 		http.Error(w, "invalid visitor id", http.StatusUnauthorized)
 		return
@@ -224,7 +224,7 @@ func (h *Handler) UserURLS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vid, ok := r.Context().Value("vid").(uuid.UUID)
+	vid, ok := r.Context().Value(model.VisitorIDKey).(uuid.UUID)
 	if !ok {
 		http.Error(w, "invalid visitor id", http.StatusInternalServerError)
 		return
