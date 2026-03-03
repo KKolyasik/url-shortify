@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	ErrInvalidCookie = errors.New("Cookie is invalid")
-	ErrNoVisitorID   = errors.New("No visitor ID")
+	ErrInvalidCookie = errors.New("cookie is invalid")
+	ErrNoVisitorID   = errors.New("no visitor ID")
 )
 
 type VisitorClaims struct {
