@@ -19,16 +19,16 @@ type fakeStorage struct {
 	lastURLSaved string
 	lastVID      uuid.UUID
 
-	userURLs    []model.UserURLs
+	userURLs    []model.URL
 	userURLsErr error
 }
 
-func (f *fakeStorage) GetURLByID(ctx context.Context, id string) (string, error) {
+func (f *fakeStorage) GetURLByID(ctx context.Context, id string) (model.URL, error) {
 	u, ok := f.idToURL[id]
 	if !ok {
-		return "", ErrNotFound
+		return model.URL{}, ErrNotFound
 	}
-	return u, nil
+	return model.URL{OriginalURL: u}, nil
 }
 
 func (f *fakeStorage) Save(ctx context.Context, id, u string, vid uuid.UUID) error {
@@ -51,12 +51,16 @@ func (f *fakeStorage) HasID(ctx context.Context, id string) (bool, error) {
 	return ok, nil
 }
 
-func (f *fakeStorage) GetURLIDByUser(ctx context.Context, vid uuid.UUID) ([]model.UserURLs, error) {
+func (f *fakeStorage) GetURLIDByUser(ctx context.Context, vid uuid.UUID) ([]model.URL, error) {
 	f.lastVID = vid
 	if f.userURLsErr != nil {
 		return nil, f.userURLsErr
 	}
 	return f.userURLs, nil
+}
+
+func (f *fakeStorage) BatchDelete(ctx context.Context, shortCodes ...string) error {
+	return nil
 }
 
 func TestServise_Resolve(t *testing.T) {
@@ -200,7 +204,7 @@ func TestService_UserResolve(t *testing.T) {
 	vid := uuid.New()
 
 	t.Run("success", func(t *testing.T) {
-		want := []model.UserURLs{
+		want := []model.URL{
 			{OriginalURL: "http://example.com/a", ShortCode: "abc"},
 			{OriginalURL: "http://example.com/b", ShortCode: "xyz"},
 		}

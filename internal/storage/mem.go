@@ -17,48 +17,58 @@ var (
 )
 
 type MemoryStore struct {
-	mu       sync.RWMutex
-	idToURL  map[string]string
-	urlToID  map[string]string
-	idToUser map[string]uuid.UUID
+	mu          sync.RWMutex
+	idToURL     map[string]string
+	urlToID     map[string]string
+	idToUser    map[string]uuid.UUID
+	idToDeleted map[string]bool
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		idToURL:  make(map[string]string),
-		urlToID:  make(map[string]string),
-		idToUser: make(map[string]uuid.UUID),
+		idToURL:     make(map[string]string),
+		urlToID:     make(map[string]string),
+		idToUser:    make(map[string]uuid.UUID),
+		idToDeleted: make(map[string]bool),
 	}
 }
 
-func (m *MemoryStore) GetIDByURL(ctx context.Context, u string) (string, error) {
+func (m *MemoryStore) GetIDByURL(ctx context.Context, u string) (model.URL, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	select {
 	case <-ctx.Done():
-		return "", ctx.Err()
+		return model.URL{}, ctx.Err()
 	default:
 	}
 	id, ok := m.urlToID[u]
 	if !ok {
-		return "", nil
+		return model.URL{}, nil
 	}
-	return id, nil
+	return model.URL{
+		ShortCode: id,
+		IsDeleted: m.idToDeleted[id],
+	}, nil
 }
 
-func (m *MemoryStore) GetURLByID(ctx context.Context, id string) (string, error) {
+func (m *MemoryStore) GetURLByID(ctx context.Context, id string) (model.URL, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	select {
 	case <-ctx.Done():
-		return "", ctx.Err()
+		return model.URL{}, ctx.Err()
 	default:
 	}
 	u, ok := m.idToURL[id]
 	if !ok {
-		return "", ErrURLNotFound
+		return model.URL{}, ErrURLNotFound
 	}
-	return u, nil
+	return model.URL{
+		ShortCode:   id,
+		OriginalURL: u,
+		UserID:      m.idToUser[id],
+		IsDeleted:   m.idToDeleted[id],
+	}, nil
 }
 
 func (m *MemoryStore) Save(ctx context.Context, id, u string, vid uuid.UUID) error {
@@ -80,6 +90,7 @@ func (m *MemoryStore) Save(ctx context.Context, id, u string, vid uuid.UUID) err
 	m.idToURL[id] = u
 	m.urlToID[u] = id
 	m.idToUser[id] = vid
+	m.idToDeleted[id] = false
 	return nil
 }
 
@@ -112,7 +123,7 @@ func (m *MemoryStore) GetAllIDToURLs(ctx context.Context) (map[string]string, er
 	return dst, nil
 }
 
-func (m *MemoryStore) GetURLIDByUser(ctx context.Context, vid uuid.UUID) ([]model.UserURLs, error) {
+func (m *MemoryStore) GetURLIDByUser(ctx context.Context, vid uuid.UUID) ([]model.URL, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -122,7 +133,7 @@ func (m *MemoryStore) GetURLIDByUser(ctx context.Context, vid uuid.UUID) ([]mode
 	}
 	sort.Strings(ids)
 
-	urls := make([]model.UserURLs, 0)
+	urls := make([]model.URL, 0)
 	for _, id := range ids {
 		select {
 		case <-ctx.Done():
@@ -139,16 +150,18 @@ func (m *MemoryStore) GetURLIDByUser(ctx context.Context, vid uuid.UUID) ([]mode
 			continue
 		}
 
-		urls = append(urls, model.UserURLs{
+		urls = append(urls, model.URL{
 			OriginalURL: originalURL,
 			ShortCode:   id,
+			UserID:      m.idToUser[id],
+			IsDeleted:   m.idToDeleted[id],
 		})
 	}
 
 	return urls, nil
 }
 
-func (m *MemoryStore) GetAllURLs(ctx context.Context) ([]URL, error) {
+func (m *MemoryStore) GetAllURLs(ctx context.Context) ([]model.URL, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -158,7 +171,7 @@ func (m *MemoryStore) GetAllURLs(ctx context.Context) ([]URL, error) {
 	}
 	sort.Strings(ids)
 
-	urls := make([]URL, 0, len(ids))
+	urls := make([]model.URL, 0, len(ids))
 	for _, id := range ids {
 		select {
 		case <-ctx.Done():
@@ -166,13 +179,35 @@ func (m *MemoryStore) GetAllURLs(ctx context.Context) ([]URL, error) {
 		default:
 		}
 
-		urls = append(urls, URL{
+		urls = append(urls, model.URL{
 			UUID:        uuid.New(),
-			ShortURL:    id,
+			ShortCode:   id,
 			OriginalURL: m.idToURL[id],
 			UserID:      m.idToUser[id],
+			IsDeleted:   m.idToDeleted[id],
 		})
 	}
 
 	return urls, nil
+}
+
+func (m *MemoryStore) BatchDelete(ctx context.Context, shortCodes ...string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, code := range shortCodes {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if _, ok := m.idToURL[code]; !ok {
+			continue
+		}
+
+		m.idToDeleted[code] = true
+	}
+
+	return nil
 }

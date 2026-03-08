@@ -16,11 +16,11 @@ func TestMemoryStore_Empty(t *testing.T) {
 
 	id, err := s.GetIDByURL(context.Background(), "http://example.com/")
 	assert.NoError(t, err)
-	assert.Equal(t, "", id)
+	assert.Equal(t, "", id.ShortCode)
 
 	u, err := s.GetURLByID(context.Background(), "abc")
 	assert.ErrorIs(t, err, ErrURLNotFound)
-	assert.Equal(t, "", u)
+	assert.Equal(t, "", u.OriginalURL)
 
 	ok, err := s.HasID(context.Background(), "abc")
 	assert.NoError(t, err)
@@ -35,11 +35,11 @@ func TestMemoryStore_SaveAndGet(t *testing.T) {
 
 	u, err := s.GetURLByID(context.Background(), "id1")
 	assert.NoError(t, err)
-	assert.Equal(t, "http://example.com/", u)
+	assert.Equal(t, "http://example.com/", u.OriginalURL)
 
 	id, err := s.GetIDByURL(context.Background(), "http://example.com/")
 	assert.NoError(t, err)
-	assert.Equal(t, "id1", id)
+	assert.Equal(t, "id1", id.ShortCode)
 
 	ok1, err := s.HasID(context.Background(), "id1")
 	assert.NoError(t, err)
@@ -60,15 +60,15 @@ func TestMemoryStore_SaveOverwriteSameID(t *testing.T) {
 
 	u, err := s.GetURLByID(context.Background(), "id1")
 	assert.NoError(t, err)
-	assert.Equal(t, "http://a.com/", u)
+	assert.Equal(t, "http://a.com/", u.OriginalURL)
 
 	id, err := s.GetIDByURL(context.Background(), "http://b.com/")
 	assert.NoError(t, err)
-	assert.Equal(t, "", id)
+	assert.Equal(t, "", id.ShortCode)
 
 	oldID, err := s.GetIDByURL(context.Background(), "http://a.com/")
 	assert.NoError(t, err)
-	assert.Equal(t, "id1", oldID)
+	assert.Equal(t, "id1", oldID.ShortCode)
 }
 
 func TestMemoryStore_SaveOverwriteSameURL(t *testing.T) {
@@ -84,15 +84,15 @@ func TestMemoryStore_SaveOverwriteSameURL(t *testing.T) {
 
 	id, err := s.GetIDByURL(context.Background(), "http://a.com/")
 	assert.NoError(t, err)
-	assert.Equal(t, "id1", id)
+	assert.Equal(t, "id1", id.ShortCode)
 
 	u, err := s.GetURLByID(context.Background(), "id2")
 	assert.ErrorIs(t, err, ErrURLNotFound)
-	assert.Equal(t, "", u)
+	assert.Equal(t, "", u.OriginalURL)
 
 	u1, err := s.GetURLByID(context.Background(), "id1")
 	assert.NoError(t, err)
-	assert.Equal(t, "http://a.com/", u1)
+	assert.Equal(t, "http://a.com/", u1.OriginalURL)
 
 	ok1, _ := s.HasID(context.Background(), "id1")
 	ok2, _ := s.HasID(context.Background(), "id1")
@@ -135,7 +135,25 @@ func TestMemoryStore_GetAllURLs(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, urls, 1)
 
-	assert.Equal(t, "id1", urls[0].ShortURL)
+	assert.Equal(t, "id1", urls[0].ShortCode)
 	assert.Equal(t, "http://a.com/", urls[0].OriginalURL)
 	assert.Equal(t, vid, urls[0].UserID)
+}
+
+func TestMemoryStore_BatchDelete(t *testing.T) {
+	s := NewMemoryStore()
+	vid := uuid.New()
+
+	require.NoError(t, s.Save(context.Background(), "id1", "http://a.com/", vid))
+	require.NoError(t, s.Save(context.Background(), "id2", "http://b.com/", vid))
+
+	require.NoError(t, s.BatchDelete(context.Background(), "id1"))
+
+	u1, err := s.GetURLByID(context.Background(), "id1")
+	require.NoError(t, err)
+	assert.True(t, u1.IsDeleted)
+
+	u2, err := s.GetURLByID(context.Background(), "id2")
+	require.NoError(t, err)
+	assert.False(t, u2.IsDeleted)
 }

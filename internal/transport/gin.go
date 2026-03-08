@@ -26,6 +26,10 @@ type UserResolver interface {
 	UserURLS(w http.ResponseWriter, r *http.Request)
 }
 
+type URLDeleter interface {
+	DeleteURLS(w http.ResponseWriter, r *http.Request)
+}
+
 func GinShortify(s Shortifyer) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		s.Shortify(ctx.Writer, ctx.Request)
@@ -54,5 +58,11 @@ func GinShortifyBatch(s BatchShortifyer) gin.HandlerFunc {
 func GinUserURLS(u UserResolver) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		u.UserURLS(ctx.Writer, ctx.Request)
+	}
+}
+
+func GinDeleteURL(d URLDeleter) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		d.DeleteURLS(ctx.Writer, ctx.Request)
 	}
 }

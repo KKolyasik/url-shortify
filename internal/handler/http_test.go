@@ -28,7 +28,7 @@ func (b *BodyErr) Read(p []byte) (int, error) {
 type mockShortener struct {
 	shortenFn func(raw string) (string, error)
 	resolveFn func(id string) (string, error)
-	userURLsFn func(vid uuid.UUID) ([]model.UserURLs, error)
+	userURLsFn func(vid uuid.UUID) ([]model.URL, error)
 }
 
 func (m *mockShortener) Shorten(ctx context.Context, raw string, vid uuid.UUID) (string, error) {
@@ -45,12 +45,16 @@ func (m *mockShortener) Resolve(ctx context.Context, id string) (string, error) 
 	return m.resolveFn(id)
 }
 
-func (m *mockShortener) UserResolve(ctx context.Context, vid uuid.UUID) ([]model.UserURLs, error) {
+func (m *mockShortener) UserResolve(ctx context.Context, vid uuid.UUID) ([]model.URL, error) {
 	if m.userURLsFn == nil {
 		return nil, nil
 	}
 
 	return m.userURLsFn(vid)
+}
+
+func (m *mockShortener) Delete(ctx context.Context, vid uuid.UUID, shortCodes ...string) error {
+	return nil
 }
 
 func marshalRequestBody(url string) string {
@@ -497,8 +501,8 @@ func TestHandler_UserURLS(t *testing.T) {
 			method:  http.MethodGet,
 			withVID: true,
 			mock: mockShortener{
-				userURLsFn: func(vid uuid.UUID) ([]model.UserURLs, error) {
-					return []model.UserURLs{
+				userURLsFn: func(vid uuid.UUID) ([]model.URL, error) {
+					return []model.URL{
 						{OriginalURL: "http://example.com/a", ShortCode: "abc"},
 						{OriginalURL: "http://example.com/b", ShortCode: "xyz"},
 					}, nil
@@ -518,8 +522,8 @@ func TestHandler_UserURLS(t *testing.T) {
 			method:  http.MethodGet,
 			withVID: true,
 			mock: mockShortener{
-				userURLsFn: func(vid uuid.UUID) ([]model.UserURLs, error) {
-					return []model.UserURLs{}, nil
+				userURLsFn: func(vid uuid.UUID) ([]model.URL, error) {
+					return []model.URL{}, nil
 				},
 			},
 			want: want{

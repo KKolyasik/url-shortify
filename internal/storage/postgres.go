@@ -41,7 +41,7 @@ func (p *PostgresDB) Ping(ctx context.Context) error {
 	return p.pool.Ping(ctx)
 }
 
-func (p *PostgresDB) GetIDByURL(ctx context.Context, u string) (string, error) {
+func (p *PostgresDB) GetIDByURL(ctx context.Context, u string) (model.URL, error) {
 	var id string
 	i := sq.Select("short_code").
 		From("urls").
@@ -49,36 +49,41 @@ func (p *PostgresDB) GetIDByURL(ctx context.Context, u string) (string, error) {
 		PlaceholderFormat(sq.Dollar)
 	query, args, err := i.ToSql()
 	if err != nil {
-		return "", err
+		return model.URL{}, err
 	}
 	row := p.pool.QueryRow(ctx, query, args...)
 	err = row.Scan(&id)
 	if err == pgx.ErrNoRows {
-		return "", nil
+		return model.URL{}, nil
 	}
 	if err != nil {
-		return "", err
+		return model.URL{}, err
 	}
 
-	return id, nil
+	return model.URL{ShortCode: id}, nil
 }
 
-func (p *PostgresDB) GetURLByID(ctx context.Context, id string) (string, error) {
+func (p *PostgresDB) GetURLByID(ctx context.Context, id string) (model.URL, error) {
 	var url string
-	u := sq.Select("original_url").
+	var isDeleted bool
+	u := sq.Select("original_url", "is_deleted").
 		From("urls").
 		Where(sq.Eq{"short_code": id}).
 		PlaceholderFormat(sq.Dollar)
 	query, args, err := u.ToSql()
 	if err != nil {
-		return "", err
+		return model.URL{}, err
 	}
 	row := p.pool.QueryRow(ctx, query, args...)
-	err = row.Scan(&url)
+	err = row.Scan(&url, &isDeleted)
 	if err != nil {
-		return "", err
+		return model.URL{}, err
 	}
-	return url, nil
+	return model.URL{
+		ShortCode:   id,
+		OriginalURL: url,
+		IsDeleted:   isDeleted,
+	}, nil
 }
 
 func (p *PostgresDB) Save(ctx context.Context, id, u string, vid uuid.UUID) error {
@@ -146,7 +151,7 @@ func (p *PostgresDB) HasID(ctx context.Context, id string) (bool, error) {
 	return exists, nil
 }
 
-func (p *PostgresDB) GetURLIDByUser(ctx context.Context, vid uuid.UUID) ([]model.UserURLs, error) {
+func (p *PostgresDB) GetURLIDByUser(ctx context.Context, vid uuid.UUID) ([]model.URL, error) {
 	query, args, err := sq.
 		Select("original_url", "short_code").
 		From("urls").
@@ -166,10 +171,10 @@ func (p *PostgresDB) GetURLIDByUser(ctx context.Context, vid uuid.UUID) ([]model
 
 	defer rows.Close()
 
-	urls := make([]model.UserURLs, 0)
+	urls := make([]model.URL, 0)
 
 	for rows.Next() {
-		var url model.UserURLs
+		var url model.URL
 		err = rows.Scan(&url.OriginalURL, &url.ShortCode)
 		if err != nil {
 			return nil, err
@@ -182,6 +187,28 @@ func (p *PostgresDB) GetURLIDByUser(ctx context.Context, vid uuid.UUID) ([]model
 	}
 
 	return urls, nil
+}
+
+func (p *PostgresDB) BatchDelete(ctx context.Context, shortCodes ...string) error {
+	logger.Log.Sugar().Infow("Начало удаление BatchDelete")
+	batch := pgx.Batch{}
+	query := "UPDATE urls SET is_deleted = $1 WHERE short_code = $2"
+	for _, code := range shortCodes {
+		batch.Queue(query, true, code)
+	}
+
+	br := p.pool.SendBatch(ctx, &batch)
+	defer br.Close()
+	for i := 0; i < len(shortCodes); i++ {
+		_, err := br.Exec()
+		if err != nil {
+			logger.Log.Sugar().Infow("Ошибка выполнения запроса в batch", "err", err)
+			return err
+		}
+	}
+
+	logger.Log.Sugar().Infow("Успешно удалили")
+	return nil
 }
 
 func runMigrations(pool *pgxpool.Pool) error {

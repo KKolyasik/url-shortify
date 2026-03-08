@@ -94,6 +94,7 @@ func main() {
 	router.POST("/", transport.GinShortify(h))
 	router.GET("/:id", transport.GinRedirect(h))
 	router.GET("/api/user/urls", transport.GinUserURLS(h))
+	router.DELETE("/api/user/urls", transport.GinDeleteURL(h))
 
 	router.GET("/ping", gin.WrapF(hch.HealthCheck))
 

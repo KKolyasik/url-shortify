@@ -7,20 +7,15 @@ import (
 	"os"
 
 	"github.com/KKolyasik/url-shortify/internal/logger"
+	"github.com/KKolyasik/url-shortify/internal/model"
 	"github.com/google/uuid"
 )
 
 type Storage interface {
 	Save(ctx context.Context, id, u string, vid uuid.UUID) error
 	HasID(ctx context.Context, id string) (bool, error)
-	GetAllURLs(ctx context.Context) ([]URL, error)
-}
-
-type URL struct {
-	UUID        uuid.UUID `json:"uuid"`
-	ShortURL    string    `json:"short_url"`
-	OriginalURL string    `json:"original_url"`
-	UserID      uuid.UUID `json:"user_id,omitempty"`
+	GetAllURLs(ctx context.Context) ([]model.URL, error)
+	BatchDelete(ctx context.Context, shortCodes ...string) error
 }
 
 type FileStorage struct {
@@ -45,7 +40,7 @@ func NewFileStorage(filename string, storage Storage) (*FileStorage, error) {
 
 func (f *FileStorage) Restore(ctx context.Context) error {
 	logger.Log.Sugar().Info("Восстановление началось")
-	var urls []URL
+	var urls []model.URL
 	err := f.decoder.Decode(&urls)
 
 	if err != nil && err != io.EOF {
@@ -58,18 +53,23 @@ func (f *FileStorage) Restore(ctx context.Context) error {
 			return ctx.Err()
 		default:
 		}
-		ok, err := f.storage.HasID(ctx, url.ShortURL)
+		ok, err := f.storage.HasID(ctx, url.ShortCode)
 		if err != nil {
 			return err
 		}
 		if !ok {
 			vid := url.UserID
 			if vid == uuid.Nil {
-				// Backward compatibility for old file format without user_id.
 				vid = uuid.New()
 			}
-			err := f.storage.Save(ctx, url.ShortURL, url.OriginalURL, vid)
+			err := f.storage.Save(ctx, url.ShortCode, url.OriginalURL, vid)
 			if err != nil {
+				return err
+			}
+		}
+
+		if url.IsDeleted {
+			if err := f.storage.BatchDelete(ctx, url.ShortCode); err != nil {
 				return err
 			}
 		}

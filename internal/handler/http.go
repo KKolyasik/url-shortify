@@ -16,7 +16,8 @@ import (
 type ResolveShortener interface {
 	Shorten(ctx context.Context, raw string, vid uuid.UUID) (string, error)
 	Resolve(ctx context.Context, id string) (string, error)
-	UserResolve(ctx context.Context, vid uuid.UUID) ([]model.UserURLs, error)
+	UserResolve(ctx context.Context, vid uuid.UUID) ([]model.URL, error)
+	Delete(ctx context.Context, vid uuid.UUID, shortCodes ...string) error
 }
 
 type Handler struct {
@@ -87,6 +88,10 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request, id string) {
 
 	target, err := h.rs.Resolve(r.Context(), id)
 	if err != nil {
+		if errors.Is(err, domainerr.ErrURLDeleted) {
+			http.Error(w, "URL deleted", http.StatusGone)
+			return
+		}
 		http.Error(w, "URL not found", http.StatusNotFound)
 		return
 	}
@@ -245,7 +250,7 @@ func (h *Handler) UserURLS(w http.ResponseWriter, r *http.Request) {
 	for _, url := range urls {
 		response = append(response, model.UserURLsResponse{
 			OriginalURL: url.OriginalURL,
-			ShortURL: h.BaseURL + "/" + url.ShortCode,
+			ShortURL:    h.BaseURL + "/" + url.ShortCode,
 		})
 	}
 
@@ -257,4 +262,39 @@ func (h *Handler) UserURLS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "error encoding response", http.StatusInternalServerError)
 		return
 	}
+}
+
+func (h *Handler) DeleteURLS(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ct := r.Header.Get("Content-Type")
+	if ct == "" || !strings.EqualFold(ct, "application/json") {
+		http.Error(w, "Content-Type must be application/json", http.StatusBadRequest)
+		return
+	}
+
+	vid, ok := r.Context().Value(model.VisitorIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "invalid visitor id", http.StatusInternalServerError)
+		return
+	}
+
+	dec := json.NewDecoder(r.Body)
+	defer r.Body.Close()
+
+	var shortCodes []string
+	if err := dec.Decode(&shortCodes); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.rs.Delete(r.Context(), vid, shortCodes...); err != nil {
+		http.Error(w, "error deleting urls", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
 }

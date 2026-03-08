@@ -1,5 +1,7 @@
 package model
 
+import "github.com/google/uuid"
+
 type ctxKey int
 
 const VisitorIDKey ctxKey = iota
@@ -27,7 +29,10 @@ type UserURLsResponse struct {
 	OriginalURL string `json:"original_url"`
 }
 
-type UserURLs struct {
-	OriginalURL string
-	ShortCode   string
+type URL struct {
+	UUID        uuid.UUID `json:"uuid"`
+	ShortCode   string    `json:"short_url"`
+	OriginalURL string    `json:"original_url"`
+	UserID      uuid.UUID `json:"user_id,omitempty"`
+	IsDeleted   bool      `json:"is_deleted"`
 }
