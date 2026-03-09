@@ -32,16 +32,18 @@ type Storage interface {
 type Service struct {
 	storage Storage
 
+	doneCh            chan struct{}
 	shortCodeDeleteCh chan string
 }
 
-func New(storage Storage) *Service {
+func New(ctx context.Context, storage Storage) *Service {
 	svc := &Service{
 		storage:           storage,
+		doneCh: make(chan struct{}),
 		shortCodeDeleteCh: make(chan string, 1024),
 	}
 
-	go svc.deleteShortCodes()
+	go svc.deleteShortCodes(ctx)
 
 	return svc
 }
@@ -157,13 +159,33 @@ func (s *Service) Delete(ctx context.Context, vid uuid.UUID, shortCodes ...strin
 	return nil
 }
 
-func (s *Service) deleteShortCodes() {
+func (s *Service) Stop() {
+	<-s.doneCh
+}
+
+func (s *Service) deleteShortCodes(ctx context.Context) {
 	ticker := time.NewTicker(10 * time.Second)
 
 	codes := make([]string, 0)
 
 	for {
 		select {
+		case <-ctx.Done():
+			ticker.Stop()
+			for {
+				select {
+				case code := <-s.shortCodeDeleteCh:
+					codes = append(codes, code)
+				default:
+					if len(codes) > 0 {
+						flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+						s.storage.BatchDelete(flushCtx, codes...)
+						cancel()
+					}
+					close(s.doneCh)
+					return
+				}
+			}
 		case code := <-s.shortCodeDeleteCh:
 			logger.Log.Sugar().Infow("Добавили ссылку в Batch", "code", code)
 			codes = append(codes, code)
@@ -172,7 +194,7 @@ func (s *Service) deleteShortCodes() {
 				continue
 			}
 
-			err := s.storage.BatchDelete(context.Background(), codes...)
+			err := s.storage.BatchDelete(ctx, codes...)
 			if err != nil {
 				continue
 			}

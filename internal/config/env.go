@@ -1,6 +1,7 @@
 package config
 
 import (
+	"crypto/rand"
 	"os"
 	"time"
 
@@ -54,15 +55,15 @@ func ParseEnv(cfg *Config) error {
 	}
 
 	if _, ok := os.LookupEnv("READ_TIMEOUT"); ok {
-		cfg.ReadHeaderTimeout = s.ReadTimeout
+		cfg.ReadTimeout = s.ReadTimeout
 	}
 
 	if _, ok := os.LookupEnv("WRITE_TIMEOUT"); ok {
-		cfg.ReadHeaderTimeout = s.WriteTimeout
+		cfg.WriteTimeout = s.WriteTimeout
 	}
 
 	if _, ok := os.LookupEnv("IDLE_TIMEOUT"); ok {
-		cfg.ReadHeaderTimeout = s.IdleTimeout
+		cfg.IdleTimeout = s.IdleTimeout
 	}
 
 	if _, ok := os.LookupEnv("DATABASE_DSN"); ok {
@@ -71,6 +72,12 @@ func ParseEnv(cfg *Config) error {
 
 	if _, ok := os.LookupEnv("SECRET_KEY"); ok {
 		cfg.SecretKey = s.SecretKey
+	} else {
+		secretKey, err := genereteSecretKey(16)
+		if err != nil {
+			return err
+		}
+		cfg.SecretKey = secretKey
 	}
 
 	if _, ok := os.LookupEnv("TOKEN_TTL"); ok {
@@ -78,4 +85,14 @@ func ParseEnv(cfg *Config) error {
 	}
 
 	return nil
+}
+
+func genereteSecretKey(size int) (string, error) {
+	b := make([]byte, size)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+
+	return string(b), nil
 }

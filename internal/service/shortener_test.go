@@ -100,7 +100,7 @@ func TestServise_Resolve(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := New(&tt.fs)
+			svc := New(context.Background(), &tt.fs)
 			u, err := svc.Resolve(context.Background(), tt.id)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -166,7 +166,7 @@ func TestServise_Shorten(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := New(&tt.fs)
+			svc := New(context.Background(), &tt.fs)
 			id, err := svc.Shorten(context.Background(), tt.url, vid)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -191,7 +191,7 @@ func TestService_Shorten_DuplicateOriginalURL(t *testing.T) {
 		},
 	}
 
-	svc := New(&fs)
+	svc := New(context.Background(), &fs)
 	id, err := svc.Shorten(context.Background(), "http://example.com", vid)
 	assert.Empty(t, id)
 
@@ -212,7 +212,7 @@ func TestService_UserResolve(t *testing.T) {
 			userURLs: want,
 		}
 
-		svc := New(&fs)
+		svc := New(context.Background(), &fs)
 		got, err := svc.UserResolve(context.Background(), vid)
 		assert.NoError(t, err)
 		assert.Equal(t, want, got)
@@ -224,7 +224,7 @@ func TestService_UserResolve(t *testing.T) {
 			userURLsErr: errors.New("storage error"),
 		}
 
-		svc := New(&fs)
+		svc := New(context.Background(), &fs)
 		got, err := svc.UserResolve(context.Background(), vid)
 		assert.Error(t, err)
 		assert.Nil(t, got)

@@ -29,12 +29,7 @@ func GinAuthorization(cfg *config.Config) gin.HandlerFunc {
 		token, err := ctx.Cookie("Authorization")
 		if err != nil {
 			logger.Log.Sugar().Infow("Кука пришла с ошибкой. Создаем новую.")
-			claims := VisitorClaims{
-				VisitorID: uuid.New(),
-				RegisteredClaims: jwt.RegisteredClaims{
-					ExpiresAt: jwt.NewNumericDate(time.Now().Add(cfg.TokenTTL)),
-				},
-			}
+			claims := createClaims(cfg)
 			token, err := generateToken(cfg, claims)
 			if err != nil {
 				ctx.AbortWithStatus(http.StatusInternalServerError)
@@ -55,12 +50,7 @@ func GinAuthorization(cfg *config.Config) gin.HandlerFunc {
 				ctx.AbortWithStatus(http.StatusUnauthorized)
 				return
 			}
-			claims := VisitorClaims{
-				VisitorID: uuid.New(),
-				RegisteredClaims: jwt.RegisteredClaims{
-					ExpiresAt: jwt.NewNumericDate(time.Now().Add(cfg.TokenTTL)),
-				},
-			}
+			claims := createClaims(cfg)
 			token, err := generateToken(cfg, claims)
 			if err != nil {
 				ctx.AbortWithStatus(http.StatusInternalServerError)
@@ -107,4 +97,15 @@ func generateToken(cfg *config.Config, claims VisitorClaims) (string, error) {
 	}
 
 	return tokenString, nil
+}
+
+func createClaims(cfg *config.Config) VisitorClaims {
+	claims := VisitorClaims{
+		VisitorID: uuid.New(),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(cfg.TokenTTL)),
+		},
+	}
+
+	return claims
 }

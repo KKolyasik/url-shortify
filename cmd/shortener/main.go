@@ -70,16 +70,17 @@ func main() {
 
 	if fs != nil {
 		defer func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			err := fs.Save(ctx)
+			saveCtx, saveCancel  := context.WithTimeout(context.Background(), 5*time.Second)
+			defer saveCancel()
+			err := fs.Save(saveCtx)
 			if err != nil {
 				logger.Log.Sugar().Fatal(err.Error())
 			}
 		}()
 	}
 
-	svc := service.New(st)
+	appCtx, appCancel := context.WithCancel(context.Background())
+	svc := service.New(appCtx, st)
 
 	h := handler.New(cfg.URLAddr, svc)
 	hch := handler.NewHealthCheckHandler(pinger)
@@ -118,12 +119,14 @@ func main() {
 	<-quit
 	logger.Log.Sugar().Info("Завершение работы сервера...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
+	shutdownCtx, shutdownCancel  := context.WithTimeout(context.Background(), time.Second*5)
+	defer shutdownCancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Log.Sugar().Fatal("Принудительное завершение сервера")
 	}
+	appCancel()
+	svc.Stop()
 
 	logger.Log.Sugar().Info("Сервер завершил работу")
 }

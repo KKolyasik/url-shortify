@@ -29,7 +29,6 @@ func NewConfig() Config {
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       120 * time.Second,
-		SecretKey:         "supersecret",
 		TokenTTL:          time.Hour,
 	}
 }
