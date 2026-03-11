@@ -3,9 +3,12 @@ package storage
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 
 	"github.com/KKolyasik/url-shortify/internal/domainerr"
+	"github.com/KKolyasik/url-shortify/internal/model"
+	"github.com/google/uuid"
 )
 
 var (
@@ -14,49 +17,61 @@ var (
 )
 
 type MemoryStore struct {
-	mu      sync.RWMutex
-	idToURL map[string]string
-	urlToID map[string]string
+	mu          sync.RWMutex
+	idToURL     map[string]string
+	urlToID     map[string]string
+	idToUser    map[string]uuid.UUID
+	idToDeleted map[string]bool
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		idToURL: make(map[string]string),
-		urlToID: make(map[string]string),
+		idToURL:     make(map[string]string),
+		urlToID:     make(map[string]string),
+		idToUser:    make(map[string]uuid.UUID),
+		idToDeleted: make(map[string]bool),
 	}
 }
 
-func (m *MemoryStore) GetIDByURL(ctx context.Context, u string) (string, error) {
+func (m *MemoryStore) GetIDByURL(ctx context.Context, u string) (model.URL, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	select {
 	case <-ctx.Done():
-		return "", ctx.Err()
+		return model.URL{}, ctx.Err()
 	default:
 	}
 	id, ok := m.urlToID[u]
 	if !ok {
-		return "", nil
+		return model.URL{}, nil
 	}
-	return id, nil
+	return model.URL{
+		ShortCode: id,
+		IsDeleted: m.idToDeleted[id],
+	}, nil
 }
 
-func (m *MemoryStore) GetURLByID(ctx context.Context, id string) (string, error) {
+func (m *MemoryStore) GetURLByID(ctx context.Context, id string) (model.URL, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	select {
 	case <-ctx.Done():
-		return "", ctx.Err()
+		return model.URL{}, ctx.Err()
 	default:
 	}
 	u, ok := m.idToURL[id]
 	if !ok {
-		return "", ErrURLNotFound
+		return model.URL{}, ErrURLNotFound
 	}
-	return u, nil
+	return model.URL{
+		ShortCode:   id,
+		OriginalURL: u,
+		UserID:      m.idToUser[id],
+		IsDeleted:   m.idToDeleted[id],
+	}, nil
 }
 
-func (m *MemoryStore) Save(ctx context.Context, id, u string) error {
+func (m *MemoryStore) Save(ctx context.Context, id, u string, vid uuid.UUID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	select {
@@ -74,6 +89,8 @@ func (m *MemoryStore) Save(ctx context.Context, id, u string) error {
 
 	m.idToURL[id] = u
 	m.urlToID[u] = id
+	m.idToUser[id] = vid
+	m.idToDeleted[id] = false
 	return nil
 }
 
@@ -104,4 +121,93 @@ func (m *MemoryStore) GetAllIDToURLs(ctx context.Context) (map[string]string, er
 	}
 
 	return dst, nil
+}
+
+func (m *MemoryStore) GetURLIDByUser(ctx context.Context, vid uuid.UUID) ([]model.URL, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	ids := make([]string, 0, len(m.idToUser))
+	for id := range m.idToUser {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	urls := make([]model.URL, 0)
+	for _, id := range ids {
+		select {
+		case <-ctx.Done():
+			return urls, ctx.Err()
+		default:
+		}
+
+		if m.idToUser[id] != vid {
+			continue
+		}
+
+		originalURL, ok := m.idToURL[id]
+		if !ok {
+			continue
+		}
+
+		urls = append(urls, model.URL{
+			OriginalURL: originalURL,
+			ShortCode:   id,
+			UserID:      m.idToUser[id],
+			IsDeleted:   m.idToDeleted[id],
+		})
+	}
+
+	return urls, nil
+}
+
+func (m *MemoryStore) GetAllURLs(ctx context.Context) ([]model.URL, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	ids := make([]string, 0, len(m.idToURL))
+	for id := range m.idToURL {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	urls := make([]model.URL, 0, len(ids))
+	for _, id := range ids {
+		select {
+		case <-ctx.Done():
+			return urls, ctx.Err()
+		default:
+		}
+
+		urls = append(urls, model.URL{
+			UUID:        uuid.New(),
+			ShortCode:   id,
+			OriginalURL: m.idToURL[id],
+			UserID:      m.idToUser[id],
+			IsDeleted:   m.idToDeleted[id],
+		})
+	}
+
+	return urls, nil
+}
+
+func (m *MemoryStore) BatchDelete(ctx context.Context, shortCodes ...string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, code := range shortCodes {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if _, ok := m.idToURL[code]; !ok {
+			continue
+		}
+
+		m.idToDeleted[code] = true
+	}
+
+	return nil
 }

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"crypto/rand"
 	"os"
 	"time"
 
@@ -16,6 +17,8 @@ type Settings struct {
 	WriteTimeout      time.Duration `env:"WRITE_TIMEOUT"`
 	IdleTimeout       time.Duration `env:"IDLE_TIMEOUT"`
 	DBURL             string        `env:"DATABASE_DSN"`
+	SecretKey         string        `env:"SECRET_KEY"`
+	TokenTTL          time.Duration `env:"TOKEN_TTL"`
 }
 
 func ParseEnv(cfg *Config) error {
@@ -52,20 +55,44 @@ func ParseEnv(cfg *Config) error {
 	}
 
 	if _, ok := os.LookupEnv("READ_TIMEOUT"); ok {
-		cfg.ReadHeaderTimeout = s.ReadTimeout
+		cfg.ReadTimeout = s.ReadTimeout
 	}
 
 	if _, ok := os.LookupEnv("WRITE_TIMEOUT"); ok {
-		cfg.ReadHeaderTimeout = s.WriteTimeout
+		cfg.WriteTimeout = s.WriteTimeout
 	}
 
 	if _, ok := os.LookupEnv("IDLE_TIMEOUT"); ok {
-		cfg.ReadHeaderTimeout = s.IdleTimeout
+		cfg.IdleTimeout = s.IdleTimeout
 	}
 
 	if _, ok := os.LookupEnv("DATABASE_DSN"); ok {
 		cfg.DBURL = s.DBURL
 	}
 
+	if _, ok := os.LookupEnv("SECRET_KEY"); ok {
+		cfg.SecretKey = s.SecretKey
+	} else {
+		secretKey, err := genereteSecretKey(16)
+		if err != nil {
+			return err
+		}
+		cfg.SecretKey = secretKey
+	}
+
+	if _, ok := os.LookupEnv("TOKEN_TTL"); ok {
+		cfg.TokenTTL = s.TokenTTL
+	}
+
 	return nil
+}
+
+func genereteSecretKey(size int) (string, error) {
+	b := make([]byte, size)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+
+	return string(b), nil
 }

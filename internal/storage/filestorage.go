@@ -7,19 +7,15 @@ import (
 	"os"
 
 	"github.com/KKolyasik/url-shortify/internal/logger"
+	"github.com/KKolyasik/url-shortify/internal/model"
 	"github.com/google/uuid"
 )
 
 type Storage interface {
-	Save(ctx context.Context, id, u string) error
+	Save(ctx context.Context, id, u string, vid uuid.UUID) error
 	HasID(ctx context.Context, id string) (bool, error)
-	GetAllIDToURLs(ctx context.Context) (map[string]string, error)
-}
-
-type URL struct {
-	UUID        uuid.UUID `json:"uuid"`
-	ShortURL    string    `json:"short_url"`
-	OriginalURL string    `json:"original_url"`
+	GetAllURLs(ctx context.Context) ([]model.URL, error)
+	BatchDelete(ctx context.Context, shortCodes ...string) error
 }
 
 type FileStorage struct {
@@ -44,7 +40,7 @@ func NewFileStorage(filename string, storage Storage) (*FileStorage, error) {
 
 func (f *FileStorage) Restore(ctx context.Context) error {
 	logger.Log.Sugar().Info("Восстановление началось")
-	var urls []URL
+	var urls []model.URL
 	err := f.decoder.Decode(&urls)
 
 	if err != nil && err != io.EOF {
@@ -57,13 +53,23 @@ func (f *FileStorage) Restore(ctx context.Context) error {
 			return ctx.Err()
 		default:
 		}
-		ok, err := f.storage.HasID(ctx, url.ShortURL)
+		ok, err := f.storage.HasID(ctx, url.ShortCode)
 		if err != nil {
 			return err
 		}
 		if !ok {
-			err := f.storage.Save(ctx, url.ShortURL, url.OriginalURL)
+			vid := url.UserID
+			if vid == uuid.Nil {
+				vid = uuid.New()
+			}
+			err := f.storage.Save(ctx, url.ShortCode, url.OriginalURL, vid)
 			if err != nil {
+				return err
+			}
+		}
+
+		if url.IsDeleted {
+			if err := f.storage.BatchDelete(ctx, url.ShortCode); err != nil {
 				return err
 			}
 		}
@@ -81,20 +87,11 @@ func (f *FileStorage) Save(ctx context.Context) error {
 		return err
 	}
 
-	data, err := f.storage.GetAllIDToURLs(ctx)
+	data, err := f.storage.GetAllURLs(ctx)
 	if err != nil {
 		return err
 	}
-	urls := make([]URL, 0, len(data))
-
-	for id, url := range data {
-		urls = append(urls, URL{
-			UUID:        uuid.New(),
-			ShortURL:    id,
-			OriginalURL: url,
-		})
-	}
-	return f.encoder.Encode(urls)
+	return f.encoder.Encode(data)
 }
 
 func (f *FileStorage) Close() error {

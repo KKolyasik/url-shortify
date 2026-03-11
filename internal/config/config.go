@@ -13,6 +13,8 @@ type Config struct {
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
 	DBURL             string
+	SecretKey         string
+	TokenTTL          time.Duration
 }
 
 func NewConfig() Config {
@@ -27,6 +29,7 @@ func NewConfig() Config {
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		TokenTTL:          time.Hour,
 	}
 }
 
