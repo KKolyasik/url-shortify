@@ -81,6 +81,7 @@ func (h *Handler) Shortify(w http.ResponseWriter, r *http.Request) {
 	h.auditor.Notify(r.Context(), model.AuditEvent{
 		TimeStamp: time.Now().Unix(),
 		Action:    model.ActionShorten,
+		UserID:    &vid,
 		URL:       string(raw),
 	})
 }
@@ -109,9 +110,15 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request, id string) {
 
 	http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 
+	var userID *uuid.UUID
+	if vid, ok := r.Context().Value(model.VisitorIDKey).(uuid.UUID); ok {
+		userID = &vid
+	}
+
 	h.auditor.Notify(r.Context(), model.AuditEvent{
 		TimeStamp: time.Now().Unix(),
 		Action:    model.ActionFollow,
+		UserID:    userID,
 		URL:       target,
 	})
 }
@@ -183,6 +190,7 @@ func (h *Handler) ShortifyJSON(w http.ResponseWriter, r *http.Request) {
 	h.auditor.Notify(r.Context(), model.AuditEvent{
 		TimeStamp: time.Now().Unix(),
 		Action:    model.ActionShorten,
+		UserID:    &vid,
 		URL:       u.URL,
 	})
 }
