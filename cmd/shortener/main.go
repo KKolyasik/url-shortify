@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/KKolyasik/url-shortify/internal/config"
+	"github.com/KKolyasik/url-shortify/internal/audit"
 	"github.com/KKolyasik/url-shortify/internal/encoding"
 	"github.com/KKolyasik/url-shortify/internal/handler"
 	"github.com/KKolyasik/url-shortify/internal/logger"
@@ -80,8 +81,9 @@ func main() {
 	}
 
 	svc := service.New(st)
+	auditor := audit.NewAudit(&cfg.Audit, logger.Log)
 
-	h := handler.New(cfg.URLAddr, svc)
+	h := handler.New(cfg.URLAddr, svc, auditor)
 	hch := handler.NewHealthCheckHandler(pinger)
 
 	router := gin.Default()

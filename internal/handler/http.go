@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/KKolyasik/url-shortify/internal/domainerr"
 	"github.com/KKolyasik/url-shortify/internal/model"
@@ -17,13 +18,18 @@ type ResolveShortener interface {
 	Resolve(ctx context.Context, id string) (string, error)
 }
 
+type Auditor interface {
+	Notify(ctx context.Context, event model.AuditEvent)
+}
+
 type Handler struct {
 	BaseURL string
 	rs      ResolveShortener
+	auditor Auditor
 }
 
-func New(baseURL string, s ResolveShortener) *Handler {
-	return &Handler{BaseURL: baseURL, rs: s}
+func New(baseURL string, s ResolveShortener, auditor Auditor) *Handler {
+	return &Handler{BaseURL: baseURL, rs: s, auditor: auditor}
 }
 
 func (h *Handler) Shortify(w http.ResponseWriter, r *http.Request) {
@@ -62,6 +68,11 @@ func (h *Handler) Shortify(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(h.BaseURL + "/" + shortURL))
 
+	h.auditor.Notify(r.Context(), model.AuditEvent{
+		TimeStamp: time.Now().Unix(),
+		Action:    model.ActionShorten,
+		URL:       string(raw),
+	})
 }
 
 func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request, id string) {
@@ -83,6 +94,12 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request, id string) {
 	}
 
 	http.Redirect(w, r, target, http.StatusTemporaryRedirect)
+
+	h.auditor.Notify(r.Context(), model.AuditEvent{
+		TimeStamp: time.Now().Unix(),
+		Action:    model.ActionFollow,
+		URL:       target,
+	})
 }
 
 func (h *Handler) ShortifyJSON(w http.ResponseWriter, r *http.Request) {
@@ -144,6 +161,11 @@ func (h *Handler) ShortifyJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.auditor.Notify(r.Context(), model.AuditEvent{
+		TimeStamp: time.Now().Unix(),
+		Action:    model.ActionShorten,
+		URL:       u.URL,
+	})
 }
 
 func (h *Handler) ShortenBatch(w http.ResponseWriter, r *http.Request) {

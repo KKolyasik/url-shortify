@@ -29,6 +29,10 @@ type mockShortener struct {
 	resolveFn func(id string) (string, error)
 }
 
+type mockAuditor struct{}
+
+func (mockAuditor) Notify(_ context.Context, _ model.AuditEvent) {}
+
 func (m *mockShortener) Shorten(ctx context.Context, raw string) (string, error) {
 	if m.shortenFn == nil {
 		return "", nil
@@ -186,7 +190,7 @@ func TestHandler_Shortify(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := New(baseURL, &tt.mock)
+			handler := New(baseURL, &tt.mock, mockAuditor{})
 
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(tt.method, path, tt.body)
@@ -279,7 +283,7 @@ func TestHandler_Redirect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := New(baseURL, &tt.mock)
+			handler := New(baseURL, &tt.mock, mockAuditor{})
 
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(tt.method, path, nil)
@@ -426,7 +430,7 @@ func TestHandler_ShortifyJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := New(baseURL, &tt.mock)
+			handler := New(baseURL, &tt.mock, mockAuditor{})
 
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(tt.method, path, tt.body)
