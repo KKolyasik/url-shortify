@@ -17,6 +17,8 @@ type Settings struct {
 	WriteTimeout      time.Duration `env:"WRITE_TIMEOUT"`
 	IdleTimeout       time.Duration `env:"IDLE_TIMEOUT"`
 	DBURL             string        `env:"DATABASE_DSN"`
+	AuditFile         string        `env:"AUDIT_FILE"`
+	AuditURL          string        `env:"AUDIT_URL"`
 	SecretKey         string        `env:"SECRET_KEY"`
 	TokenTTL          time.Duration `env:"TOKEN_TTL"`
 }
@@ -68,6 +70,14 @@ func ParseEnv(cfg *Config) error {
 
 	if _, ok := os.LookupEnv("DATABASE_DSN"); ok {
 		cfg.DBURL = s.DBURL
+	}
+
+	if _, ok := os.LookupEnv("AUDIT_FILE"); ok {
+		cfg.Audit.AuditFile = s.AuditFile
+	}
+
+	if _, ok := os.LookupEnv("AUDIT_URL"); ok {
+		cfg.Audit.AuditURL = s.AuditURL
 	}
 
 	if _, ok := os.LookupEnv("SECRET_KEY"); ok {

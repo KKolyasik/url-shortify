@@ -42,6 +42,8 @@ func ParseFlags(cfg *Config) error {
 		return nil
 	})
 	flag.StringVar(&cfg.DBURL, "d", "", "URL for connecting to DB")
+	flag.StringVar(&cfg.Audit.AuditFile, "audit-file", "", "Audit log file path")
+	flag.StringVar(&cfg.Audit.AuditURL, "audit-url", "", "Audit log receiver URL")
 
 	flag.Parse()
 	return nil

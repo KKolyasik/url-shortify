@@ -13,8 +13,14 @@ type Config struct {
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
 	DBURL             string
+	Audit             AuditConfig
 	SecretKey         string
 	TokenTTL          time.Duration
+}
+
+type AuditConfig struct {
+	AuditFile string
+	AuditURL  string
 }
 
 func NewConfig() Config {

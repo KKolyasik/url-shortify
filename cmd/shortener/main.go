@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/KKolyasik/url-shortify/internal/audit"
 	"github.com/KKolyasik/url-shortify/internal/config"
 	"github.com/KKolyasik/url-shortify/internal/encoding"
 	"github.com/KKolyasik/url-shortify/internal/handler"
@@ -70,7 +71,7 @@ func main() {
 
 	if fs != nil {
 		defer func() {
-			saveCtx, saveCancel  := context.WithTimeout(context.Background(), 5*time.Second)
+			saveCtx, saveCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer saveCancel()
 			err := fs.Save(saveCtx)
 			if err != nil {
@@ -81,8 +82,9 @@ func main() {
 
 	appCtx, appCancel := context.WithCancel(context.Background())
 	svc := service.New(appCtx, st)
+	auditor := audit.NewAudit(&cfg.Audit, logger.Log)
 
-	h := handler.New(cfg.URLAddr, svc)
+	h := handler.New(cfg.URLAddr, svc, auditor)
 	hch := handler.NewHealthCheckHandler(pinger)
 
 	router := gin.Default()
@@ -119,7 +121,7 @@ func main() {
 	<-quit
 	logger.Log.Sugar().Info("Завершение работы сервера...")
 
-	shutdownCtx, shutdownCancel  := context.WithTimeout(context.Background(), time.Second*5)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer shutdownCancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
