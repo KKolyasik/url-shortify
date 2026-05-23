@@ -14,6 +14,8 @@ type Config struct {
 	IdleTimeout       time.Duration
 	DBURL             string
 	Audit             AuditConfig
+	SecretKey         string
+	TokenTTL          time.Duration
 }
 
 type AuditConfig struct {
@@ -33,6 +35,7 @@ func NewConfig() Config {
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		TokenTTL:          time.Hour,
 	}
 }
 

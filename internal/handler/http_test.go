@@ -13,6 +13,7 @@ import (
 
 	"github.com/KKolyasik/url-shortify/internal/domainerr"
 	"github.com/KKolyasik/url-shortify/internal/model"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,15 +26,16 @@ func (b *BodyErr) Read(p []byte) (int, error) {
 }
 
 type mockShortener struct {
-	shortenFn func(raw string) (string, error)
-	resolveFn func(id string) (string, error)
+	shortenFn  func(raw string) (string, error)
+	resolveFn  func(id string) (string, error)
+	userURLsFn func(vid uuid.UUID) ([]model.URL, error)
 }
 
 type mockAuditor struct{}
 
 func (mockAuditor) Notify(_ context.Context, _ model.AuditEvent) {}
 
-func (m *mockShortener) Shorten(ctx context.Context, raw string) (string, error) {
+func (m *mockShortener) Shorten(ctx context.Context, raw string, vid uuid.UUID) (string, error) {
 	if m.shortenFn == nil {
 		return "", nil
 	}
@@ -45,6 +47,18 @@ func (m *mockShortener) Resolve(ctx context.Context, id string) (string, error) 
 		return "", nil
 	}
 	return m.resolveFn(id)
+}
+
+func (m *mockShortener) UserResolve(ctx context.Context, vid uuid.UUID) ([]model.URL, error) {
+	if m.userURLsFn == nil {
+		return nil, nil
+	}
+
+	return m.userURLsFn(vid)
+}
+
+func (m *mockShortener) Delete(ctx context.Context, vid uuid.UUID, shortCodes ...string) error {
+	return nil
 }
 
 func marshalRequestBody(url string) string {
@@ -64,6 +78,19 @@ func marshalResponseBody(result string) string {
 		panic(err)
 	}
 	return buf.String()
+}
+
+func marshalUserURLsBody(urls []model.UserURLsResponse) string {
+	buf := bytes.NewBuffer([]byte{})
+	enc := json.NewEncoder(buf)
+	if err := enc.Encode(urls); err != nil {
+		panic(err)
+	}
+	return buf.String()
+}
+
+func withVisitorID(r *http.Request, vid uuid.UUID) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), model.VisitorIDKey, vid))
 }
 
 func TestHandler_Shortify(t *testing.T) {
@@ -195,6 +222,7 @@ func TestHandler_Shortify(t *testing.T) {
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(tt.method, path, tt.body)
 			r.Header.Set("Content-Type", tt.contentType)
+			r = withVisitorID(r, uuid.New())
 
 			handler.Shortify(w, r)
 			response := w.Result()
@@ -435,11 +463,112 @@ func TestHandler_ShortifyJSON(t *testing.T) {
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(tt.method, path, tt.body)
 			r.Header.Set("Content-Type", tt.contentType)
+			r = withVisitorID(r, uuid.New())
 
 			handler.ShortifyJSON(w, r)
 			response := w.Result()
 
 			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			assert.NoError(t, err)
+
+			assert.Equal(t, tt.want.code, response.StatusCode)
+			assert.True(t, strings.EqualFold(tt.want.contentType, response.Header.Get("Content-Type")))
+			assert.Equal(t, tt.want.body, string(body))
+		})
+	}
+}
+
+func TestHandler_UserURLS(t *testing.T) {
+	const (
+		baseURL = "http://localhost:8080"
+		path    = "/api/user/urls"
+	)
+
+	type want struct {
+		code        int
+		contentType string
+		body        string
+	}
+
+	vid := uuid.New()
+
+	tests := []struct {
+		name    string
+		method  string
+		withVID bool
+		mock    mockShortener
+		want    want
+	}{
+		{
+			name:    "success: returns 200 with user urls",
+			method:  http.MethodGet,
+			withVID: true,
+			mock: mockShortener{
+				userURLsFn: func(vid uuid.UUID) ([]model.URL, error) {
+					return []model.URL{
+						{OriginalURL: "http://example.com/a", ShortCode: "abc"},
+						{OriginalURL: "http://example.com/b", ShortCode: "xyz"},
+					}, nil
+				},
+			},
+			want: want{
+				code:        http.StatusOK,
+				contentType: "application/json",
+				body: marshalUserURLsBody([]model.UserURLsResponse{
+					{ShortURL: baseURL + "/abc", OriginalURL: "http://example.com/a"},
+					{ShortURL: baseURL + "/xyz", OriginalURL: "http://example.com/b"},
+				}),
+			},
+		},
+		{
+			name:    "no urls: returns 204",
+			method:  http.MethodGet,
+			withVID: true,
+			mock: mockShortener{
+				userURLsFn: func(vid uuid.UUID) ([]model.URL, error) {
+					return []model.URL{}, nil
+				},
+			},
+			want: want{
+				code:        http.StatusNoContent,
+				contentType: "application/json",
+				body:        "",
+			},
+		},
+		{
+			name:   "bad method -> 405",
+			method: http.MethodPost,
+			want: want{
+				code:        http.StatusMethodNotAllowed,
+				contentType: "text/plain; charset=utf-8",
+				body:        "Invalid request method\n",
+			},
+		},
+		{
+			name:   "missing visitor id -> 500",
+			method: http.MethodGet,
+			want: want{
+				code:        http.StatusInternalServerError,
+				contentType: "text/plain; charset=utf-8",
+				body:        "invalid visitor id\n",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := New(baseURL, &tt.mock, mockAuditor{})
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(tt.method, path, nil)
+			if tt.withVID {
+				r = withVisitorID(r, vid)
+			}
+
+			handler.UserURLS(w, r)
+			response := w.Result()
+			defer response.Body.Close()
+
 			body, err := io.ReadAll(response.Body)
 			assert.NoError(t, err)
 

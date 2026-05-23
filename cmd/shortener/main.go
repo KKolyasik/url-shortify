@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/KKolyasik/url-shortify/internal/config"
 	"github.com/KKolyasik/url-shortify/internal/audit"
+	"github.com/KKolyasik/url-shortify/internal/config"
 	"github.com/KKolyasik/url-shortify/internal/encoding"
 	"github.com/KKolyasik/url-shortify/internal/handler"
 	"github.com/KKolyasik/url-shortify/internal/logger"
@@ -71,16 +71,17 @@ func main() {
 
 	if fs != nil {
 		defer func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			err := fs.Save(ctx)
+			saveCtx, saveCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer saveCancel()
+			err := fs.Save(saveCtx)
 			if err != nil {
 				logger.Log.Sugar().Fatal(err.Error())
 			}
 		}()
 	}
 
-	svc := service.New(st)
+	appCtx, appCancel := context.WithCancel(context.Background())
+	svc := service.New(appCtx, st)
 	auditor := audit.NewAudit(&cfg.Audit, logger.Log)
 
 	h := handler.New(cfg.URLAddr, svc, auditor)
@@ -90,10 +91,13 @@ func main() {
 	router.Use(ginmw.RequestLogger(logger.Log.Sugar()))
 	router.Use(gin.Recovery())
 	router.Use(ginmw.GinContentEncoding(logger.Log.Sugar(), en))
+	router.Use(ginmw.GinAuthorization(&cfg))
 	router.POST("/api/shorten", transport.GinShortifyJSON(h))
 	router.POST("/api/shorten/batch", transport.GinShortifyBatch(h))
 	router.POST("/", transport.GinShortify(h))
 	router.GET("/:id", transport.GinRedirect(h))
+	router.GET("/api/user/urls", transport.GinUserURLS(h))
+	router.DELETE("/api/user/urls", transport.GinDeleteURL(h))
 
 	router.GET("/ping", gin.WrapF(hch.HealthCheck))
 
@@ -117,12 +121,14 @@ func main() {
 	<-quit
 	logger.Log.Sugar().Info("Завершение работы сервера...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer shutdownCancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Log.Sugar().Fatal("Принудительное завершение сервера")
 	}
+	appCancel()
+	svc.Stop()
 
 	logger.Log.Sugar().Info("Сервер завершил работу")
 }
